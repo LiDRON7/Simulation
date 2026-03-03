@@ -1,0 +1,35 @@
+version: "3.9"
+
+services:
+  drone-ci:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.ci
+    image: ghcr.io/${GITHUB_REPOSITORY:-your-org/drone-sim}:ci
+    container_name: drone_sim_ci
+
+    environment:
+      - ENABLE_VNC=false
+      - GZ_HEADLESS_RENDERING=1
+      - LIBGL_ALWAYS_SOFTWARE=1
+      - ROS_DOMAIN_ID=0
+      - PX4_SYS_AUTOSTART=4006
+      - PX4_GZ_MODEL=hexacopter
+      - PX4_GZ_WORLD=outdoor_obstacles
+
+    volumes:
+      - ./models:/drone_sim/models
+      - ./worlds:/drone_sim/worlds
+      - ./config:/drone_sim/config
+      - ./scripts:/drone_sim/scripts
+      - ./tests:/drone_sim/tests
+      - ./ros2_ws:/drone_sim/ros2_ws
+
+    networks:
+      - drone_net_ci
+
+    command: pytest /drone_sim/tests/ -v --timeout=120 --json-report --json-report-file=/drone_sim/tests/results.json
+
+networks:
+  drone_net_ci:
+    driver: bridge
