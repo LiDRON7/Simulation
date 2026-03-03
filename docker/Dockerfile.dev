@@ -1,0 +1,121 @@
+# ================================================================
+# DEVELOPMENT DOCKERFILE
+# Ubuntu 24.04 | PX4 v1.16 | Gazebo Harmonic | ROS 2 Jazzy
+# Sensors: Velodyne Puck Lite LiDAR, OAK-D Pro, GPS, Pixhawk
+# Visual: VNC on port 5900 (connect via VNC Viewer on macOS)
+# ================================================================
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Etc/UTC
+ENV ROS_DISTRO=jazzy
+ENV DISPLAY=:99
+ENV PX4_VERSION=v1.16.0
+ENV GZ_SIM_RESOURCE_PATH=/drone_sim/models:/drone_sim/worlds
+ENV GZ_SIM_SYSTEM_PLUGIN_PATH=/px4/build/px4_sitl_default/build_gazebo-harmonic
+
+# ── 1. Base system tools ─────────────────────────────────────
+RUN apt-get update && apt-get install -y \
+    wget curl git sudo vim tzdata \
+    lsb-release gnupg2 software-properties-common \
+    build-essential cmake ninja-build \
+    x11-apps xvfb x11vnc fluxbox \
+    mesa-utils libgl1-mesa-dri \
+    python3 python3-pip python3-setuptools python3-wheel \
+    python3-jinja2 python3-numpy python3-empy \
+    python3-toml python3-yaml python3-kconfiglib \
+    python-is-python3 \
+    protobuf-compiler libprotobuf-dev \
+    libeigen3-dev libopencv-dev \
+    genromfs libxml2-dev libxslt1-dev \
+    libusb-1.0-0-dev libudev-dev \
+    gstreamer1.0-plugins-bad gstreamer1.0-libav \
+    gstreamer1.0-gl libgstreamer-plugins-base1.0-dev \
+    net-tools iproute2 iputils-ping \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# ── 2. Gazebo Harmonic ───────────────────────────────────────
+RUN wget https://packages.osrfoundation.org/gazebo.gpg \
+      -O /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg \
+ && echo "deb [arch=$(dpkg --print-architecture) \
+      signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] \
+      http://packages.osrfoundation.org/gazebo/ubuntu-stable \
+      $(lsb_release -cs) main" \
+      > /etc/apt/sources.list.d/gazebo-stable.list \
+ && apt-get update \
+ && apt-get install -y gz-harmonic \
+ && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# ── 3. ROS 2 Jazzy ───────────────────────────────────────────
+RUN curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
+      -o /usr/share/keyrings/ros-archive-keyring.gpg \
+ && echo "deb [arch=$(dpkg --print-architecture) \
+      signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] \
+      http://packages.ros.org/ros2/ubuntu \
+      $(lsb_release -cs) main" \
+      > /etc/apt/sources.list.d/ros2.list \
+ && apt-get update \
+ && apt-get install -y \
+      ros-jazzy-desktop \
+      ros-jazzy-ros-gz \
+      ros-jazzy-ros-gz-bridge \
+      ros-jazzy-ros-gz-sim \
+      ros-jazzy-mavros \
+      ros-jazzy-mavros-extras \
+      ros-jazzy-sensor-msgs \
+      ros-jazzy-geometry-msgs \
+      ros-jazzy-nav-msgs \
+      ros-jazzy-std-msgs \
+      ros-jazzy-tf2-ros \
+      ros-jazzy-tf2-tools \
+      ros-jazzy-pcl-ros \
+      ros-jazzy-point-cloud-msgs \
+      ros-jazzy-velodyne \
+      ros-jazzy-velodyne-description \
+      ros-jazzy-velodyne-simulator \
+      ros-jazzy-image-transport \
+      ros-jazzy-cv-bridge \
+      ros-jazzy-vision-opencv \
+      python3-colcon-common-extensions \
+      python3-rosdep \
+      python3-vcstool \
+ && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# MAVROS geographic datasets (required for GPS/EKF)
+RUN wget -q https://raw.githubusercontent.com/mavlink/mavros/master/mavros/scripts/install_geographiclib_datasets.sh \
+ && chmod +x install_geographiclib_datasets.sh \
+ && ./install_geographiclib_datasets.sh \
+ && rm install_geographiclib_datasets.sh
+
+# ── 4. OAK-D Pro — DepthAI SDK ──────────────────────────────
+RUN pip3 install --break-system-packages depthai depthai-sdk
+
+# ── 5. Python utilities ──────────────────────────────────────
+RUN pip3 install --break-system-packages \
+    pyserial pymavlink packaging kconfiglib future jsonschema
+
+# ── 6. PX4 v1.16 SITL ───────────────────────────────────────
+RUN git clone --branch v1.16.0 --depth 1 --recursive \
+      https://github.com/PX4/PX4-Autopilot.git /px4
+
+RUN /px4/Tools/setup/ubuntu.sh --no-nuttx
+
+WORKDIR /px4
+RUN MAKEFLAGS="-j2" make px4_sitl_default
+
+# ── 7. Workspace layout ──────────────────────────────────────
+RUN mkdir -p \
+    /drone_sim/models/hexacopter \
+    /drone_sim/models/velodyne_puck_lite \
+    /drone_sim/worlds \
+    /drone_sim/config \
+    /drone_sim/scripts \
+    /drone_sim/ros2_ws/src
+
+WORKDIR /drone_sim
+EXPOSE 5900
+
+COPY scripts/start_dev.sh /start_dev.sh
+RUN chmod +x /start_dev.sh
+ENTRYPOINT ["/start_dev.sh"]
+CMD ["bash"]
