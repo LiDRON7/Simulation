@@ -1,0 +1,53 @@
+version: "3.9"
+
+services:
+  drone-dev:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dev
+    image: ghcr.io/${GITHUB_REPOSITORY:-your-org/drone-sim}:dev
+    container_name: drone_sim_dev
+    privileged: true # Required for USB passthrough (OAK-D Pro)
+
+    environment:
+      - ENABLE_VNC=true
+      - VNC_PASSWORD=${VNC_PASSWORD:-px4vnc}
+      - DISPLAY=:99
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
+      - PX4_SYS_AUTOSTART=4006
+      - PX4_GZ_MODEL=hexacopter
+      - PX4_GZ_WORLD=outdoor_obstacles
+
+    ports:
+      - "5900:5900" # VNC — connect via VNC Viewer on macOS to localhost:5900
+      - "14550:14550/udp" # MAVLink — QGroundControl
+      - "14540:14540/udp" # MAVLink — MAVROS
+      - "8888:8888" # Optional: Jupyter / debug web tools
+
+    volumes:
+      - ./models:/drone_sim/models
+      - ./worlds:/drone_sim/worlds
+      - ./config:/drone_sim/config
+      - ./scripts:/drone_sim/scripts
+      - ./ros2_ws:/drone_sim/ros2_ws
+      # Persist PX4 build cache across restarts
+      - px4_build_cache:/px4/build
+
+    devices:
+      # OAK-D Pro USB passthrough — adjust if device path differs
+      - /dev/bus/usb:/dev/bus/usb
+
+    networks:
+      - drone_net
+
+    stdin_open: true
+    tty: true
+
+    command: /drone_sim/scripts/run_simulation.sh
+
+volumes:
+  px4_build_cache:
+
+networks:
+  drone_net:
+    driver: bridge
