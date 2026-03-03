@@ -1,0 +1,23 @@
+# PX4 SITL parameter overrides for hexacopter research configuration
+# Applied via: param load /drone_sim/config/px4_params.yaml
+
+# Airframe: generic hexacopter (X configuration)
+SYS_AUTOSTART: 4006
+
+# EKF2 — enable GPS + barometer fusion
+EKF2_AID_MASK: 1 # GPS position
+EKF2_HGT_REF: 0 # barometric height reference
+EKF2_GPS_CHECK: 245 # all GPS checks enabled
+
+# MAVLink — SITL UDP ports
+MAV_0_CONFIG: 101 # TELEM1 → MAVROS
+MAV_1_CONFIG: 102 # TELEM2 → GCS / QGroundControl
+
+# Safety — SITL friendly (disable geofence hard limits in sim)
+GF_ACTION: 1 # warning only
+COM_RCL_EXCEPT: 4 # disable RC loss failsafe in SITL
+
+# Obstacle avoidance integration
+CP_DIST: 3.0 # collision prevention distance (meters)
+CP_GO_NO_DATA: 0 # stop if no sensor data
+MPC_COL_PREV_D: 3.0 # minimum distance to keep from obstacles
