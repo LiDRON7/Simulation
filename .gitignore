@@ -1,0 +1,43 @@
+# Docker
+docker-compose.override.yml
+.env
+
+# PX4 build artifacts
+/px4/build/
+/px4/Tools/simulation/
+
+# ROS 2 workspace build output
+ros2_ws/build/
+ros2_ws/install/
+ros2_ws/log/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+*.so
+
+# Test results
+tests/results.json
+tests/.pytest_cache/
+.pytest_cache/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+logs/
+
+# Gazebo cache
+~/.gz/
