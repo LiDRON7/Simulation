@@ -1,26 +1,46 @@
 #!/bin/bash
 set -e
 
-# Source ROS 2
 source /opt/ros/jazzy/setup.bash
-
-# Source workspace if already built
 [ -f /drone_sim/ros2_ws/install/setup.bash ] && \
     source /drone_sim/ros2_ws/install/setup.bash
 
-# Start virtual display + VNC for macOS viewing
 if [ "${ENABLE_VNC}" = "true" ]; then
     echo "[DEV] Starting Xvfb virtual display..."
+
+    rm -f /tmp/.X99-lock /tmp/.X11-unix/X99 2>/dev/null || true
+
     Xvfb :99 -screen 0 1920x1080x24 &
+
+    for i in $(seq 1 20); do
+        xdpyinfo -display :99 >/dev/null 2>&1 && break
+        sleep 0.5
+    done
+    echo "[DEV] Xvfb ready."
+
+    fluxbox 2>/dev/null &
     sleep 2
-    fluxbox &
-    sleep 1
+
     x11vnc -display :99 -forever -shared \
         -rfbport 5900 \
         -passwd "${VNC_PASSWORD:-px4vnc}" \
-        -noxdamage &
-    echo "[DEV] VNC ready → connect to localhost:5900"
+        -noxdamage \
+        -quiet &
+
+    echo "[DEV] VNC ready -> connect to localhost:5900"
     echo "[DEV] VNC password: ${VNC_PASSWORD:-px4vnc}"
+    sleep 2
 fi
 
-exec "$@"
+SIM_SCRIPT=/drone_sim/scripts/run_simulation.sh
+if [ -f "$SIM_SCRIPT" ]; then
+    chmod +x "$SIM_SCRIPT"
+    echo "[DEV] Launching simulation..."
+    "$SIM_SCRIPT" &
+    SIM_PID=$!
+    echo "[DEV] Simulation running as PID $SIM_PID"
+else
+    echo "[DEV] No run_simulation.sh found. Dropping to shell."
+fi
+
+tail -f /dev/null

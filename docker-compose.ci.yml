@@ -2,6 +2,7 @@ version: "3.9"
 
 services:
   drone-ci:
+    platform: linux/amd64
     build:
       context: .
       dockerfile: docker/Dockerfile.ci

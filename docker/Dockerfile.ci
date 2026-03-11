@@ -15,7 +15,7 @@ ENV LIBGL_ALWAYS_SOFTWARE=1
 ENV GZ_SIM_RESOURCE_PATH=/drone_sim/models:/drone_sim/worlds
 ENV GZ_SIM_SYSTEM_PLUGIN_PATH=/px4/build/px4_sitl_default/build_gazebo-harmonic
 
-# ── 1. Base system tools (minimal) ──────────────────────────
+# ── 1. Base system tools (minimal) ───────────────────────────
 RUN apt-get update && apt-get install -y \
     wget curl git sudo tzdata \
     lsb-release gnupg2 software-properties-common \
@@ -68,33 +68,91 @@ RUN curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
       ros-jazzy-std-msgs \
       ros-jazzy-tf2-ros \
       ros-jazzy-pcl-ros \
-      ros-jazzy-point-cloud-msgs \
       ros-jazzy-velodyne \
-      ros-jazzy-velodyne-simulator \
       python3-colcon-common-extensions \
       python3-rosdep \
  && apt-get clean && rm -rf /var/lib/apt/lists/*
 
+# ── 4. MAVROS geographic datasets ────────────────────────────
 RUN wget -q https://raw.githubusercontent.com/mavlink/mavros/master/mavros/scripts/install_geographiclib_datasets.sh \
  && chmod +x install_geographiclib_datasets.sh \
  && ./install_geographiclib_datasets.sh \
  && rm install_geographiclib_datasets.sh
 
-# ── 4. Python utilities + test tools ────────────────────────
+# ── 5. Python utilities + test tools ─────────────────────────
 RUN pip3 install --break-system-packages \
     pyserial pymavlink packaging kconfiglib future \
     pytest pytest-timeout pytest-json-report
 
-# ── 5. PX4 v1.16 SITL ───────────────────────────────────────
-RUN git clone --branch v1.16.0 --depth 1 --recursive \
-      https://github.com/PX4/PX4-Autopilot.git /px4
+# ── 6. PX4 v1.16 clone ───────────────────────────────────────
+# Same retry-resilient approach as dev — CI runners can also hit
+# transient GitHub network failures on large clones.
+RUN git config --global http.postBuffer 524288000 \
+ && git config --global http.lowSpeedLimit 1000 \
+ && git config --global http.lowSpeedTime 60 \
+ && git config --global http.retryCount 5 \
+ && echo "--- Cloning PX4-Autopilot v1.16.0 ---" \
+ && for i in 1 2 3 4 5; do \
+      echo "Clone attempt $i/5..." \
+      && git clone --branch v1.16.0 --depth 1 --filter=blob:none \
+           https://github.com/PX4/PX4-Autopilot.git /px4 \
+      && echo "Clone succeeded." && break \
+      || { echo "Clone attempt $i failed."; \
+           [ $i -lt 5 ] \
+             && echo "Retrying in 15s..." && sleep 15 && rm -rf /px4 \
+             || { echo "All clone attempts failed."; exit 1; }; }; \
+    done
 
-RUN /px4/Tools/setup/ubuntu.sh --no-nuttx
+# ── 7. PX4 submodules ────────────────────────────────────────
+RUN echo "--- Initializing required submodules ---" \
+ && cd /px4 \
+ && for i in 1 2 3; do \
+      echo "Submodule init attempt $i/3..." \
+      && git submodule update --init --depth 1 --filter=blob:none \
+           Tools/simulation/gz \
+           src/modules/uxrce_dds_client/Micro-XRCE-DDS-Client \
+           src/lib/cdrstream/cyclonedds \
+           src/lib/cdrstream/rosidl \
+           src/lib/events/libevents \
+           src/modules/mavlink/mavlink \
+           src/drivers/gps/devices \
+           src/drivers/cyphal/libcanard \
+           src/drivers/cyphal/public_regulated_data_types \
+           src/lib/crypto/libtomcrypt \
+           src/lib/crypto/libtommath \
+           src/lib/crypto/monocypher \
+           src/lib/heatshrink/heatshrink \
+      && echo "Submodule init succeeded." && break \
+      || { echo "Submodule init attempt $i failed."; \
+           [ $i -lt 3 ] \
+             && echo "Retrying in 15s..." && sleep 15 \
+             || { echo "All submodule attempts failed."; exit 1; }; }; \
+    done
 
+# ── 8. pymavlink nested submodule ────────────────────────────
+RUN echo "--- Initializing pymavlink nested submodule ---" \
+ && cd /px4/src/modules/mavlink/mavlink \
+ && for i in 1 2 3; do \
+      echo "pymavlink init attempt $i/3..." \
+      && git submodule update --init --depth 1 --filter=blob:none pymavlink \
+      && echo "pymavlink init succeeded." && break \
+      || { echo "pymavlink init attempt $i failed."; \
+           [ $i -lt 3 ] \
+             && echo "Retrying in 15s..." && sleep 15 \
+             || { echo "pymavlink init failed. Cannot build MAVLink headers."; exit 1; }; }; \
+    done
+
+# ── 9. PX4 system dependencies ───────────────────────────────
+RUN echo "--- Installing PX4 system dependencies ---" \
+ && /px4/Tools/setup/ubuntu.sh --no-nuttx
+
+# ── 10. Build PX4 SITL ───────────────────────────────────────
 WORKDIR /px4
-RUN MAKEFLAGS="-j2" make px4_sitl_default
+RUN echo "--- Building PX4 SITL (this takes 15-30 minutes) ---" \
+ && MAKEFLAGS="-j2" make px4_sitl_default \
+ && echo "--- PX4 SITL build complete ---"
 
-# ── 6. Workspace layout ──────────────────────────────────────
+# ── 11. Workspace layout ─────────────────────────────────────
 RUN mkdir -p \
     /drone_sim/models/hexacopter \
     /drone_sim/models/velodyne_puck_lite \
@@ -106,7 +164,9 @@ RUN mkdir -p \
 
 WORKDIR /drone_sim
 
+# ── 12. Entrypoint ───────────────────────────────────────────
 COPY scripts/start_ci.sh /start_ci.sh
 RUN chmod +x /start_ci.sh
+
 ENTRYPOINT ["/start_ci.sh"]
 CMD ["bash"]
