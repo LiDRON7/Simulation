@@ -175,7 +175,7 @@ WORKDIR /drone_sim
 RUN mkdir -p /root/.fluxbox \
  && printf '[begin] (Drone Sim)\n\
   [exec] (Terminal) {xterm}\n\
-  [exec] (Open Gazebo GUI) {xterm -hold -e bash -c "export DISPLAY=:99 && export XDG_RUNTIME_DIR=/tmp/runtime-root && mkdir -p /tmp/runtime-root && gz gui -s /world/outdoor_obstacles/gui/info"}\n\
+  [exec] (Open Gazebo GUI) {xterm -hold -e bash -c "export DISPLAY=:99 && export XDG_RUNTIME_DIR=/tmp/runtime-root && mkdir -p /tmp/runtime-root && gz gui"}\n\
   [exec] (ROS Topic List) {xterm -hold -e bash -c "source /opt/ros/jazzy/setup.bash && ros2 topic list"}\n\
   [exec] (Simulation Logs) {xterm -hold -e bash -c "tail -f /px4/build/px4_sitl_default/rootfs/log/$(ls -t /px4/build/px4_sitl_default/rootfs/log/ 2>/dev/null | head -1)/*.ulg 2>/dev/null || echo No logs yet"}\n\
   [separator]\n\

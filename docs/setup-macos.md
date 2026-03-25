@@ -25,8 +25,8 @@ If you skip this the build will fail with a platform mismatch error.
 
 ## Clone and configure
 
-    git clone https://github.com/your-org/drone-sim.git
-    cd drone-sim
+    git clone https://github.com/LiDRON7/Simulation.git
+    cd Simulation
     cp .env.example .env
 
 The defaults in .env work for local development. You only need to change

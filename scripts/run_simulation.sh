@@ -65,7 +65,14 @@ ros2 run mavros mavros_node \
     -p tgt_system:=1 \
     -p tgt_component:=1 &
 MAVROS_PID=$!
+# ── Launch Gazebo GUI ─────────────────────────────────────────
+echo "[SIM] Launching Gazebo GUI..."
+export XDG_RUNTIME_DIR=/tmp/runtime-root
+mkdir -p /tmp/runtime-root
+DISPLAY=:99 gz gui &
+GZ_GUI_PID=$!
 
+echo "[SIM] Gazebo GUI PID=$GZ_GUI_PID"
 echo "[SIM] ================================================"
 echo "[SIM] All systems launched."
 echo "[SIM] PX4     PID=$PX4_PID"
