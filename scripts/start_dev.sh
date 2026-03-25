@@ -5,11 +5,18 @@ source /opt/ros/jazzy/setup.bash
 [ -f /drone_sim/ros2_ws/install/setup.bash ] && \
     source /drone_sim/ros2_ws/install/setup.bash
 
-if [ "${ENABLE_VNC}" = "true" ]; then
+export XDG_RUNTIME_DIR=/tmp/runtime-root
+export QT_X11_NO_MITSHM=1
+mkdir -p /tmp/runtime-root
+
+# ── Display setup ─────────────────────────────────────────────
+# ENABLE_VNC=true  → Mac / headless: start Xvfb + VNC on :5900
+# ENABLE_VNC=false → Linux: use host X11 display passed via DISPLAY env
+
+if [ "${ENABLE_VNC:-true}" = "true" ]; then
     echo "[DEV] Starting Xvfb virtual display..."
 
     rm -f /tmp/.X99-lock /tmp/.X11-unix/X99 2>/dev/null || true
-
     Xvfb :99 -screen 0 1920x1080x24 &
 
     for i in $(seq 1 20); do
@@ -17,6 +24,8 @@ if [ "${ENABLE_VNC}" = "true" ]; then
         sleep 0.5
     done
     echo "[DEV] Xvfb ready."
+
+    export DISPLAY=:99
 
     fluxbox 2>/dev/null &
     sleep 2
@@ -30,6 +39,9 @@ if [ "${ENABLE_VNC}" = "true" ]; then
     echo "[DEV] VNC ready -> connect to localhost:5900"
     echo "[DEV] VNC password: ${VNC_PASSWORD:-px4vnc}"
     sleep 2
+else
+    echo "[DEV] Using host X11 display: $DISPLAY"
+    echo "[DEV] Gazebo GUI will appear on your host desktop."
 fi
 
 SIM_SCRIPT=/drone_sim/scripts/run_simulation.sh

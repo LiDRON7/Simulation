@@ -26,8 +26,8 @@ Verify both work:
 
 ## Clone and configure
 
-    git clone https://github.com/your-org/drone-sim.git
-    cd drone-sim
+    git clone https://github.com/LiDRON7/Simulation.git
+    cd Simulation
     cp .env.example .env
 
 ## Build
@@ -42,23 +42,14 @@ to cut the PX4 compile time roughly in half.
 
     docker compose -f docker-compose.dev.yml up
 
-If you want to view the Gazebo GUI on your Linux desktop directly instead of
-VNC, you can pass your X display through instead. Add this to the environment
-section in docker-compose.dev.yml:
-
-    DISPLAY: $DISPLAY
-
-And add this to volumes:
-
-    /tmp/.X11-unix:/tmp/.X11-unix
-
-Then run:
+Gazebo GUI will appear directly on your desktop. Before starting, allow the
+container to use your X display:
 
     xhost +local:docker
 
-before starting compose. In this case set ENABLE_VNC=false in your .env.
-
-If you prefer to keep VNC, install any VNC viewer and connect to localhost:5900.
+If you prefer VNC instead (e.g. on a headless server), remove the DISPLAY
+and X11 socket entries from docker-compose.dev.yml and connect a VNC viewer
+to localhost:5900 with password px4vnc.
 
 ## OAK-D Pro USB access
 

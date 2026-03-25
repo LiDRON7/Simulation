@@ -9,9 +9,9 @@ services:
     privileged: true
 
     environment:
-      - ENABLE_VNC=true
+      - ENABLE_VNC=${ENABLE_VNC:-true}
       - VNC_PASSWORD=${VNC_PASSWORD:-px4vnc}
-      - DISPLAY=:99
+      - DISPLAY=${DISPLAY}
       - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
       - PX4_SYS_AUTOSTART=4006
       - PX4_GZ_MODEL=hexacopter
@@ -30,6 +30,7 @@ services:
       - ./scripts:/drone_sim/scripts
       - ./ros2_ws:/drone_sim/ros2_ws
       - px4_build_cache:/px4/build
+
     devices:
       - /dev/bus/usb:/dev/bus/usb
 
