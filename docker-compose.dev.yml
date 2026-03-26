@@ -1,28 +1,19 @@
 services:
   drone-dev:
+    image: ghcr.io/lidron7/simulation:dev
+    container_name: drone_sim_dev
     platform: linux/amd64
     build:
       context: .
       dockerfile: docker/Dockerfile.dev
-    image: ghcr.io/${GITHUB_REPOSITORY:-your-org/drone-sim}:dev
-    container_name: drone_sim_dev
-    privileged: true
-
     environment:
+      - DISPLAY=${DISPLAY}
       - ENABLE_VNC=${ENABLE_VNC:-true}
       - VNC_PASSWORD=${VNC_PASSWORD:-px4vnc}
-      - DISPLAY=${DISPLAY}
-      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
-      - PX4_SYS_AUTOSTART=4006
-      - PX4_GZ_MODEL=hexacopter
-      - PX4_GZ_WORLD=outdoor_obstacles
-
-    ports:
-      - "5900:5900"
-      - "14550:14550/udp"
-      - "14540:14540/udp"
-      - "8888:8888"
-
+      - XDG_RUNTIME_DIR=/tmp/runtime-root
+      - QT_X11_NO_MITSHM=1
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
     volumes:
       - ./models:/drone_sim/models
       - ./worlds:/drone_sim/worlds
@@ -30,19 +21,27 @@ services:
       - ./scripts:/drone_sim/scripts
       - ./ros2_ws:/drone_sim/ros2_ws
       - px4_build_cache:/px4/build
-
+      - /tmp/.X11-unix:/tmp/.X11-unix
+    ports:
+      - "5900:5900"
+      - "14550:14550/udp"
+      - "14540:14540/udp"
     devices:
       - /dev/bus/usb:/dev/bus/usb
-
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu, utility, compute, graphics, display]
     networks:
       - drone_net
-
-    stdin_open: true
-    tty: true
-
-volumes:
-  px4_build_cache:
+    restart: unless-stopped
 
 networks:
   drone_net:
-    driver: bridge
+    name: simulation_drone_net
+
+volumes:
+  px4_build_cache:

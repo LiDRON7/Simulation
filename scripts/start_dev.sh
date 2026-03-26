@@ -10,8 +10,8 @@ export QT_X11_NO_MITSHM=1
 mkdir -p /tmp/runtime-root
 
 # ── Display setup ─────────────────────────────────────────────
-# ENABLE_VNC=true  → Mac / headless: start Xvfb + VNC on :5900
-# ENABLE_VNC=false → Linux: use host X11 display passed via DISPLAY env
+# ENABLE_VNC=true  → Mac / headless: Xvfb + VNC on port 5900
+# ENABLE_VNC=false → Linux: use host DISPLAY passed via environment
 
 if [ "${ENABLE_VNC:-true}" = "true" ]; then
     echo "[DEV] Starting Xvfb virtual display..."
@@ -42,6 +42,7 @@ if [ "${ENABLE_VNC:-true}" = "true" ]; then
 else
     echo "[DEV] Using host X11 display: $DISPLAY"
     echo "[DEV] Gazebo GUI will appear on your host desktop."
+    # DISPLAY is already set from the host via docker-compose environment
 fi
 
 SIM_SCRIPT=/drone_sim/scripts/run_simulation.sh
