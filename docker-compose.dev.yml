@@ -1,33 +1,20 @@
 services:
   drone-dev:
-    image: ghcr.io/lidron7/simulation:dev
-    container_name: drone_sim_dev
-    platform: linux/amd64
     build:
       context: .
       dockerfile: docker/Dockerfile.dev
+    container_name: drone_sim_dev
+    # Use host networking — simplest way to pass DISPLAY through on Ubuntu
+    network_mode: host
     environment:
       - DISPLAY=${DISPLAY}
-      - ENABLE_VNC=${ENABLE_VNC:-true}
-      - VNC_PASSWORD=${VNC_PASSWORD:-px4vnc}
-      - XDG_RUNTIME_DIR=/tmp/runtime-root
       - QT_X11_NO_MITSHM=1
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=all
     volumes:
-      - ./models:/drone_sim/models
-      - ./worlds:/drone_sim/worlds
-      - ./config:/drone_sim/config
-      - ./scripts:/drone_sim/scripts
-      - ./ros2_ws:/drone_sim/ros2_ws
-      - px4_build_cache:/px4/build
+      # X11 socket so Gazebo GUI can render on your screen
       - /tmp/.X11-unix:/tmp/.X11-unix
-    ports:
-      - "5900:5900"
-      - "14550:14550/udp"
-      - "14540:14540/udp"
-    devices:
-      - /dev/bus/usb:/dev/bus/usb
+      # Your workspace (create this folder if it doesn't exist yet)
+      - ./ros2_ws:/ros2_ws
+    # Allow GPU access (optional but recommended for Gazebo rendering)
     deploy:
       resources:
         reservations:
@@ -35,13 +22,3 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu, utility, compute, graphics, display]
-    networks:
-      - drone_net
-    restart: unless-stopped
-
-networks:
-  drone_net:
-    name: simulation_drone_net
-
-volumes:
-  px4_build_cache:
