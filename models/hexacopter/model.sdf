@@ -1,0 +1,346 @@
+<?xml version="1.0"?>
+<!--
+  Hexacopter model for Gazebo Harmonic / ROS 2 Jazzy
+  ─────────────────────────────────────────────────────────────────────────────
+  Sensors modelled:
+    • 6 × rotors  (X hex layout, CW/CCW alternating)
+    • OAK-D Pro   (front, pitched down 15°) — RGBD camera
+    • Velodyne Puck Lite (VLP-16, downward-facing) — 3D lidar for landing
+    • IMU          (built-in, required by PX4 SITL)
+
+  All topics are remapped to match the PX4 SITL / ROS 2 bridge convention.
+  See worlds/outdoor_field.sdf for the world that spawns this model.
+-->
+<sdf version="1.9">
+  <model name="hexacopter">
+    <pose>0 0 0.25 0 0 0</pose>
+
+    <!-- ═══════════════════════════ BASE LINK ═══════════════════════════ -->
+    <link name="base_link">
+      <inertial>
+        <mass>2.5</mass>
+        <inertia>
+          <ixx>0.025204</ixx>
+          <iyy>0.025204</iyy>
+          <izz>0.049508</izz>
+          <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz>
+        </inertia>
+      </inertial>
+
+      <!-- Frame (thin disc approximation) -->
+      <visual name="body_visual">
+        <geometry>
+          <cylinder><radius>0.18</radius><length>0.06</length></cylinder>
+        </geometry>
+        <material>
+          <ambient>0.1 0.1 0.1 1</ambient>
+          <diffuse>0.2 0.2 0.2 1</diffuse>
+        </material>
+      </visual>
+      <collision name="body_collision">
+        <geometry>
+          <cylinder><radius>0.18</radius><length>0.06</length></cylinder>
+        </geometry>
+      </collision>
+
+      <!-- ─────────────── OAK-D Pro (front, -15° pitch) ─────────────── -->
+      <!--
+        Mounted at the nose of the frame, tilted 15° downward so the camera
+        sees the ground ahead during forward flight — good for obstacle
+        detection at low altitude.
+      -->
+      <sensor name="oakd_rgb" type="camera">
+        <pose>0.12 0 0.02 0 0.26 0</pose>  <!-- 0.26 rad ≈ 15° pitch down -->
+        <camera>
+          <horizontal_fov>1.2043</horizontal_fov>  <!-- 69° — OAK-D Pro spec -->
+          <image>
+            <width>1920</width>
+            <height>1080</height>
+            <format>R8G8B8</format>
+          </image>
+          <clip><near>0.1</near><far>35.0</far></clip>
+        </camera>
+        <update_rate>30</update_rate>
+        <always_on>true</always_on>
+        <visualize>false</visualize>
+        <topic>/hexacopter/oakd/rgb/image_raw</topic>
+      </sensor>
+
+      <sensor name="oakd_depth" type="depth_camera">
+        <pose>0.12 0.035 0.02 0 0.26 0</pose>  <!-- slight offset (stereo baseline ~7.5cm) -->
+        <camera>
+          <horizontal_fov>1.2043</horizontal_fov>
+          <image>
+            <width>640</width>
+            <height>400</height>
+            <format>R_FLOAT32</format>
+          </image>
+          <clip><near>0.4</near><far>15.0</far></clip>  <!-- OAK-D Pro depth range -->
+        </camera>
+        <update_rate>30</update_rate>
+        <always_on>true</always_on>
+        <visualize>false</visualize>
+        <topic>/hexacopter/oakd/depth/image_raw</topic>
+      </sensor>
+
+      <!-- ─────────── Velodyne Puck Lite (VLP-16, downward) ─────────── -->
+      <!--
+        Mounted under the belly, rotated 180° on X so it points straight down.
+        VLP-16 specs: 16 channels, 360° horizontal, ±15° vertical, 100m range,
+        10 Hz rotation, ~300k pts/s.
+      -->
+      <sensor name="velodyne_puck_lite" type="gpu_lidar">
+        <pose>0 0 -0.05 3.14159 0 0</pose>  <!-- pointing down -->
+        <lidar>
+          <scan>
+            <horizontal>
+              <samples>1800</samples>       <!-- 0.2° angular resolution -->
+              <resolution>1</resolution>
+              <min_angle>-3.14159</min_angle>
+              <max_angle>3.14159</max_angle>
+            </horizontal>
+            <vertical>
+              <samples>16</samples>          <!-- VLP-16 channels -->
+              <resolution>1</resolution>
+              <min_angle>-0.2618</min_angle> <!-- -15° -->
+              <max_angle>0.2618</max_angle>  <!-- +15° -->
+            </vertical>
+          </scan>
+          <range>
+            <min>0.1</min>
+            <max>100.0</max>
+            <resolution>0.01</resolution>
+          </range>
+          <noise>
+            <type>gaussian</type>
+            <mean>0.0</mean>
+            <stddev>0.01</stddev>
+          </noise>
+        </lidar>
+        <update_rate>10</update_rate>
+        <always_on>true</always_on>
+        <visualize>false</visualize>
+        <topic>/hexacopter/lidar/points</topic>
+      </sensor>
+
+      <!-- ──────────────────── IMU (PX4 SITL) ──────────────────────── -->
+      <sensor name="imu" type="imu">
+        <pose>0 0 0 0 0 0</pose>
+        <imu>
+          <angular_velocity>
+            <x><noise type="gaussian"><mean>0</mean><stddev>0.009</stddev></noise></x>
+            <y><noise type="gaussian"><mean>0</mean><stddev>0.009</stddev></noise></y>
+            <z><noise type="gaussian"><mean>0</mean><stddev>0.009</stddev></noise></z>
+          </angular_velocity>
+          <linear_acceleration>
+            <x><noise type="gaussian"><mean>0</mean><stddev>0.021</stddev></noise></x>
+            <y><noise type="gaussian"><mean>0</mean><stddev>0.021</stddev></noise></y>
+            <z><noise type="gaussian"><mean>0</mean><stddev>0.021</stddev></noise></z>
+          </linear_acceleration>
+        </imu>
+        <update_rate>250</update_rate>
+        <always_on>true</always_on>
+        <topic>/hexacopter/imu</topic>
+      </sensor>
+    </link>
+
+    <!-- ══════════════════════════ ROTORS ══════════════════════════════ -->
+    <!--
+      Hex X layout (top view, CCW = counter-clockwise from above):
+        5   1
+       4     2     ← motor numbering (PX4 convention)
+        3   6
+      Odd  = CW,  Even = CCW  (alternating)
+      Arm length: 0.275 m from centre
+    -->
+
+    <!-- Motor 1 — front-right, CW -->
+    <link name="rotor_1">
+      <pose>0.238 -0.138 0.023 0 0 0</pose>
+      <inertial><mass>0.025</mass><inertia><ixx>9.75e-7</ixx><iyy>1.66704e-4</iyy><izz>1.66704e-4</izz><ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia></inertial>
+      <visual name="rotor_1_visual"><geometry><cylinder><radius>0.12</radius><length>0.005</length></cylinder></geometry><material><ambient>0.1 0.5 0.1 0.8</ambient><diffuse>0.1 0.8 0.1 0.8</diffuse></material></visual>
+      <collision name="rotor_1_collision"><geometry><cylinder><radius>0.12</radius><length>0.005</length></cylinder></geometry></collision>
+    </link>
+    <joint name="rotor_1_joint" type="revolute">
+      <parent>base_link</parent><child>rotor_1</child>
+      <axis><xyz>0 0 1</xyz><limit><lower>-1e+16</lower><upper>1e+16</upper></limit><dynamics><damping>0.004</damping></dynamics></axis>
+    </joint>
+
+    <!-- Motor 2 — right, CCW -->
+    <link name="rotor_2">
+      <pose>0 -0.275 0.023 0 0 0</pose>
+      <inertial><mass>0.025</mass><inertia><ixx>9.75e-7</ixx><iyy>1.66704e-4</iyy><izz>1.66704e-4</izz><ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia></inertial>
+      <visual name="rotor_2_visual"><geometry><cylinder><radius>0.12</radius><length>0.005</length></cylinder></geometry><material><ambient>0.5 0.1 0.1 0.8</ambient><diffuse>0.8 0.1 0.1 0.8</diffuse></material></visual>
+      <collision name="rotor_2_collision"><geometry><cylinder><radius>0.12</radius><length>0.005</length></cylinder></geometry></collision>
+    </link>
+    <joint name="rotor_2_joint" type="revolute">
+      <parent>base_link</parent><child>rotor_2</child>
+      <axis><xyz>0 0 -1</xyz><limit><lower>-1e+16</lower><upper>1e+16</upper></limit><dynamics><damping>0.004</damping></dynamics></axis>
+    </joint>
+
+    <!-- Motor 3 — rear-right, CW -->
+    <link name="rotor_3">
+      <pose>-0.238 -0.138 0.023 0 0 0</pose>
+      <inertial><mass>0.025</mass><inertia><ixx>9.75e-7</ixx><iyy>1.66704e-4</iyy><izz>1.66704e-4</izz><ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia></inertial>
+      <visual name="rotor_3_visual"><geometry><cylinder><radius>0.12</radius><length>0.005</length></cylinder></geometry><material><ambient>0.1 0.5 0.1 0.8</ambient><diffuse>0.1 0.8 0.1 0.8</diffuse></material></visual>
+      <collision name="rotor_3_collision"><geometry><cylinder><radius>0.12</radius><length>0.005</length></cylinder></geometry></collision>
+    </link>
+    <joint name="rotor_3_joint" type="revolute">
+      <parent>base_link</parent><child>rotor_3</child>
+      <axis><xyz>0 0 1</xyz><limit><lower>-1e+16</lower><upper>1e+16</upper></limit><dynamics><damping>0.004</damping></dynamics></axis>
+    </joint>
+
+    <!-- Motor 4 — rear-left, CCW -->
+    <link name="rotor_4">
+      <pose>-0.238 0.138 0.023 0 0 0</pose>
+      <inertial><mass>0.025</mass><inertia><ixx>9.75e-7</ixx><iyy>1.66704e-4</iyy><izz>1.66704e-4</izz><ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia></inertial>
+      <visual name="rotor_4_visual"><geometry><cylinder><radius>0.12</radius><length>0.005</length></cylinder></geometry><material><ambient>0.5 0.1 0.1 0.8</ambient><diffuse>0.8 0.1 0.1 0.8</diffuse></material></visual>
+      <collision name="rotor_4_collision"><geometry><cylinder><radius>0.12</radius><length>0.005</length></cylinder></geometry></collision>
+    </link>
+    <joint name="rotor_4_joint" type="revolute">
+      <parent>base_link</parent><child>rotor_4</child>
+      <axis><xyz>0 0 -1</xyz><limit><lower>-1e+16</lower><upper>1e+16</upper></limit><dynamics><damping>0.004</damping></dynamics></axis>
+    </joint>
+
+    <!-- Motor 5 — left, CW -->
+    <link name="rotor_5">
+      <pose>0 0.275 0.023 0 0 0</pose>
+      <inertial><mass>0.025</mass><inertia><ixx>9.75e-7</ixx><iyy>1.66704e-4</iyy><izz>1.66704e-4</izz><ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia></inertial>
+      <visual name="rotor_5_visual"><geometry><cylinder><radius>0.12</radius><length>0.005</length></cylinder></geometry><material><ambient>0.1 0.5 0.1 0.8</ambient><diffuse>0.1 0.8 0.1 0.8</diffuse></material></visual>
+      <collision name="rotor_5_collision"><geometry><cylinder><radius>0.12</radius><length>0.005</length></cylinder></geometry></collision>
+    </link>
+    <joint name="rotor_5_joint" type="revolute">
+      <parent>base_link</parent><child>rotor_5</child>
+      <axis><xyz>0 0 1</xyz><limit><lower>-1e+16</lower><upper>1e+16</upper></limit><dynamics><damping>0.004</damping></dynamics></axis>
+    </joint>
+
+    <!-- Motor 6 — front-left, CCW -->
+    <link name="rotor_6">
+      <pose>0.238 0.138 0.023 0 0 0</pose>
+      <inertial><mass>0.025</mass><inertia><ixx>9.75e-7</ixx><iyy>1.66704e-4</iyy><izz>1.66704e-4</izz><ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia></inertial>
+      <visual name="rotor_6_visual"><geometry><cylinder><radius>0.12</radius><length>0.005</length></cylinder></geometry><material><ambient>0.5 0.1 0.1 0.8</ambient><diffuse>0.8 0.1 0.1 0.8</diffuse></material></visual>
+      <collision name="rotor_6_collision"><geometry><cylinder><radius>0.12</radius><length>0.005</length></cylinder></geometry></collision>
+    </link>
+    <joint name="rotor_6_joint" type="revolute">
+      <parent>base_link</parent><child>rotor_6</child>
+      <axis><xyz>0 0 -1</xyz><limit><lower>-1e+16</lower><upper>1e+16</upper></limit><dynamics><damping>0.004</damping></dynamics></axis>
+    </joint>
+
+    <!-- ═══════════════════ MULTICOPTER MOTOR PLUGIN ═══════════════════ -->
+    <!--
+      Gazebo Harmonic's MulticopterMotorModel plugin drives each rotor.
+      motorNumber must match PX4 SITL mixer output order (1-indexed).
+    -->
+    <plugin filename="gz-sim-multicopter-motor-model-system"
+            name="gz::sim::systems::MulticopterMotorModel">
+      <robotNamespace>hexacopter</robotNamespace>
+      <jointName>rotor_1_joint</jointName><linkName>rotor_1</linkName>
+      <turningDirection>cw</turningDirection>
+      <timeConstantUp>0.0125</timeConstantUp><timeConstantDown>0.025</timeConstantDown>
+      <maxRotVelocity>1100</maxRotVelocity>
+      <motorConstant>8.54858e-06</motorConstant>
+      <momentConstant>0.016</momentConstant>
+      <commandSubTopic>gazebo/command/motor_speed</commandSubTopic>
+      <motorNumber>0</motorNumber>
+      <rotorDragCoefficient>8.06428e-05</rotorDragCoefficient>
+      <rollingMomentCoefficient>1e-06</rollingMomentCoefficient>
+      <motorSpeedPubTopic>motor_speed/0</motorSpeedPubTopic>
+      <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+    </plugin>
+
+    <plugin filename="gz-sim-multicopter-motor-model-system"
+            name="gz::sim::systems::MulticopterMotorModel">
+      <robotNamespace>hexacopter</robotNamespace>
+      <jointName>rotor_2_joint</jointName><linkName>rotor_2</linkName>
+      <turningDirection>ccw</turningDirection>
+      <timeConstantUp>0.0125</timeConstantUp><timeConstantDown>0.025</timeConstantDown>
+      <maxRotVelocity>1100</maxRotVelocity>
+      <motorConstant>8.54858e-06</motorConstant>
+      <momentConstant>0.016</momentConstant>
+      <commandSubTopic>gazebo/command/motor_speed</commandSubTopic>
+      <motorNumber>1</motorNumber>
+      <rotorDragCoefficient>8.06428e-05</rotorDragCoefficient>
+      <rollingMomentCoefficient>1e-06</rollingMomentCoefficient>
+      <motorSpeedPubTopic>motor_speed/1</motorSpeedPubTopic>
+      <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+    </plugin>
+
+    <plugin filename="gz-sim-multicopter-motor-model-system"
+            name="gz::sim::systems::MulticopterMotorModel">
+      <robotNamespace>hexacopter</robotNamespace>
+      <jointName>rotor_3_joint</jointName><linkName>rotor_3</linkName>
+      <turningDirection>cw</turningDirection>
+      <timeConstantUp>0.0125</timeConstantUp><timeConstantDown>0.025</timeConstantDown>
+      <maxRotVelocity>1100</maxRotVelocity>
+      <motorConstant>8.54858e-06</motorConstant>
+      <momentConstant>0.016</momentConstant>
+      <commandSubTopic>gazebo/command/motor_speed</commandSubTopic>
+      <motorNumber>2</motorNumber>
+      <rotorDragCoefficient>8.06428e-05</rotorDragCoefficient>
+      <rollingMomentCoefficient>1e-06</rollingMomentCoefficient>
+      <motorSpeedPubTopic>motor_speed/2</motorSpeedPubTopic>
+      <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+    </plugin>
+
+    <plugin filename="gz-sim-multicopter-motor-model-system"
+            name="gz::sim::systems::MulticopterMotorModel">
+      <robotNamespace>hexacopter</robotNamespace>
+      <jointName>rotor_4_joint</jointName><linkName>rotor_4</linkName>
+      <turningDirection>ccw</turningDirection>
+      <timeConstantUp>0.0125</timeConstantUp><timeConstantDown>0.025</timeConstantDown>
+      <maxRotVelocity>1100</maxRotVelocity>
+      <motorConstant>8.54858e-06</motorConstant>
+      <momentConstant>0.016</momentConstant>
+      <commandSubTopic>gazebo/command/motor_speed</commandSubTopic>
+      <motorNumber>3</motorNumber>
+      <rotorDragCoefficient>8.06428e-05</rotorDragCoefficient>
+      <rollingMomentCoefficient>1e-06</rollingMomentCoefficient>
+      <motorSpeedPubTopic>motor_speed/3</motorSpeedPubTopic>
+      <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+    </plugin>
+
+    <plugin filename="gz-sim-multicopter-motor-model-system"
+            name="gz::sim::systems::MulticopterMotorModel">
+      <robotNamespace>hexacopter</robotNamespace>
+      <jointName>rotor_5_joint</jointName><linkName>rotor_5</linkName>
+      <turningDirection>cw</turningDirection>
+      <timeConstantUp>0.0125</timeConstantUp><timeConstantDown>0.025</timeConstantDown>
+      <maxRotVelocity>1100</maxRotVelocity>
+      <motorConstant>8.54858e-06</motorConstant>
+      <momentConstant>0.016</momentConstant>
+      <commandSubTopic>gazebo/command/motor_speed</commandSubTopic>
+      <motorNumber>4</motorNumber>
+      <rotorDragCoefficient>8.06428e-05</rotorDragCoefficient>
+      <rollingMomentCoefficient>1e-06</rollingMomentCoefficient>
+      <motorSpeedPubTopic>motor_speed/4</motorSpeedPubTopic>
+      <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+    </plugin>
+
+    <plugin filename="gz-sim-multicopter-motor-model-system"
+            name="gz::sim::systems::MulticopterMotorModel">
+      <robotNamespace>hexacopter</robotNamespace>
+      <jointName>rotor_6_joint</jointName><linkName>rotor_6</linkName>
+      <turningDirection>ccw</turningDirection>
+      <timeConstantUp>0.0125</timeConstantUp><timeConstantDown>0.025</timeConstantDown>
+      <maxRotVelocity>1100</maxRotVelocity>
+      <motorConstant>8.54858e-06</motorConstant>
+      <momentConstant>0.016</momentConstant>
+      <commandSubTopic>gazebo/command/motor_speed</commandSubTopic>
+      <motorNumber>5</motorNumber>
+      <rotorDragCoefficient>8.06428e-05</rotorDragCoefficient>
+      <rollingMomentCoefficient>1e-06</rollingMomentCoefficient>
+      <motorSpeedPubTopic>motor_speed/5</motorSpeedPubTopic>
+      <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+    </plugin>
+
+    <!-- Odometry / ground truth pose for PX4 EKF -->
+    <plugin filename="gz-sim-odometry-publisher-system"
+            name="gz::sim::systems::OdometryPublisher">
+      <odom_frame>odom</odom_frame>
+      <robot_base_frame>base_link</robot_base_frame>
+      <odom_publish_frequency>50</odom_publish_frequency>
+      <topic>/hexacopter/odometry</topic>
+    </plugin>
+
+  </model>
+</sdf>
