@@ -1,31 +1,52 @@
-# Drone Simulation — Setup Guide
+# Drone Simulation
 
-Tested on **Ubuntu 24.04 (native)** and **Ubuntu 24.04 VM on macOS** (Apple Silicon and Intel).  
-Stack: ROS 2 Jazzy · Gazebo Harmonic · Docker.
+ROS 2 Jazzy · Gazebo Harmonic · PX4 · Docker
+
+---
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Requirements](#requirements)
+- [Setup: Linux (Ubuntu 24.04)](#setup-linux-ubuntu-2404)
+- [Setup: macOS (via UTM Virtual Machine)](#setup-macos-via-utm-virtual-machine)
+- [Build the Image](#build-the-image)
+- [Run the Simulation](#run-the-simulation)
+- [Build the ROS 2 Workspace](#build-the-ros-2-workspace)
+- [Repository Structure](#repository-structure)
+- [Troubleshooting](#troubleshooting)
+
+---
+
+## Overview
+
+This repository packages a full drone simulation stack inside Docker. Gazebo handles the physics and rendering, PX4 runs as the flight controller, and your ROS 2 packages communicate with both over standard interfaces. The container runs the same way on a native Linux machine or a Linux VM on macOS.
 
 ---
 
 ## Requirements
 
-| Tool | Version | Install |
-|------|---------|---------|
-| Docker Engine | 24+ | see below |
-| Docker Compose plugin | v2+ | see below |
-| Git | any | `sudo apt install git` |
-| XQuartz *(macOS host only)* | 2.8+ | [xquartz.org](https://www.xquartz.org) |
+| Tool                  | Version |
+| --------------------- | ------- |
+| Docker Engine         | 24+     |
+| Docker Compose plugin | v2+     |
+| Git                   | any     |
+| UTM _(macOS only)_    | 4+      |
 
 ---
 
-## 1 — Install Docker
+## Setup: Linux (Ubuntu 24.04)
 
-Do not use `apt install docker.io` — use the official script:
+### Install Docker
+
+Do not use the `apt install docker.io` package. Use the official install script instead:
 
 ```bash
 curl -fsSL https://get.docker.com -o get-docker.sh
 sh get-docker.sh
 ```
 
-Add your user to the docker group so you don't need `sudo`:
+Add your user to the `docker` group so you can run commands without `sudo`:
 
 ```bash
 sudo usermod -aG docker $USER
@@ -38,16 +59,14 @@ Install the Compose plugin:
 sudo apt-get install docker-compose-plugin
 ```
 
-Verify:
+Verify both are working:
 
 ```bash
 docker version
 docker compose version
 ```
 
----
-
-## 2 — Clone and configure
+### Clone the Repository
 
 ```bash
 git clone https://github.com/LiDRON7/Simulation.git
@@ -55,15 +74,11 @@ cd Simulation
 cp .env.example .env
 ```
 
-Edit `.env` if you need to change any defaults (ports, paths).
+Edit `.env` if you need to adjust any ports or paths.
 
----
+### Configure X11 Display Access
 
-## 3 — X11 display setup
-
-The Gazebo GUI needs access to your display. Run this **before** starting the container each session.
-
-### On a native Linux machine
+Run this before starting the container each session. It grants Docker access to your local display so the Gazebo GUI can appear.
 
 ```bash
 xhost +local:docker
@@ -71,58 +86,129 @@ touch /tmp/.docker.xauth
 xauth nlist $DISPLAY | sed -e 's/^..../ffff/' | xauth -f /tmp/.docker.xauth nmerge -
 ```
 
-### On a Linux VM running on macOS
-
-1. Install and launch **XQuartz** on your Mac.
-2. In XQuartz → Preferences → Security, enable **"Allow connections from network clients"**.
-3. Restart XQuartz after changing that setting.
-4. SSH into your VM **with X11 forwarding**:
-   ```bash
-   ssh -X your_user@your_vm_ip
-   ```
-5. Inside the VM, run:
-   ```bash
-   xhost +local:docker
-   touch /tmp/.docker.xauth
-   xauth nlist $DISPLAY | sed -e 's/^..../ffff/' | xauth -f /tmp/.docker.xauth nmerge -
-   ```
-6. Confirm your display is set:
-   ```bash
-   echo $DISPLAY   # should print something like :10.0 or localhost:10.0
-   ```
-   If it's empty: `export DISPLAY=:0`
+You are ready to [build](#build-the-image).
 
 ---
 
-## 4 — Build
+## Setup: macOS (via UTM Virtual Machine)
+
+Gazebo requires a Linux environment. On macOS, the recommended path is to run Ubuntu 24.04 inside a UTM virtual machine with a full desktop environment. The Gazebo GUI runs directly inside the VM window — no X forwarding needed.
+
+### 1. Install UTM
+
+Download UTM from [https://mac.getutm.app](https://mac.getutm.app) and install it.
+
+### 2. Create an Ubuntu 24.04 VM
+
+1. Download the Ubuntu 24.04 Server ISO from [https://ubuntu.com/download/server](https://ubuntu.com/download/server).
+2. Open UTM and click **Create a New Virtual Machine**.
+3. Select **Virtualize** (Apple Silicon) or **Emulate** (Intel Mac, slower).
+4. Choose **Linux** and point it at the ISO you downloaded.
+5. Allocate at least **8 GB RAM** and **60 GB disk**.
+6. Complete the Ubuntu installer. Create a user and note the password.
+
+### 3. Install a Desktop Environment
+
+After the first boot, install Ubuntu Desktop and the SPICE guest agent:
+
+```bash
+sudo apt update
+sudo apt install ubuntu-desktop spice-vdagent
+sudo reboot
+```
+
+After the reboot, the VM will boot into a full graphical desktop. All remaining steps run inside a terminal in that desktop.
+
+### 4. Install Docker
+
+```bash
+curl -fsSL https://get.docker.com -o get-docker.sh
+sh get-docker.sh
+sudo usermod -aG docker $USER
+newgrp docker
+sudo apt-get install docker-compose-plugin
+```
+
+Verify:
+
+```bash
+docker version
+docker compose version
+```
+
+### 5. Clone the Repository
+
+```bash
+git clone https://github.com/LiDRON7/Simulation.git
+cd Simulation
+cp .env.example .env
+```
+
+### 6. Configure X11 Display Access
+
+```bash
+xhost +local:docker
+touch /tmp/.docker.xauth
+xauth nlist $DISPLAY | sed -e 's/^..../ffff/' | xauth -f /tmp/.docker.xauth nmerge -
+```
+
+Confirm your display variable is set:
+
+```bash
+echo $DISPLAY
+```
+
+It should print something like `:0` or `:1`. If it is empty, run:
+
+```bash
+export DISPLAY=:0
+```
+
+---
+
+## Build the Image
 
 ```bash
 docker compose -f docker-compose.dev.yml build
 ```
 
-First build takes 20–40 minutes. If your machine has more than 16 GB RAM, you can speed up the PX4 compile step by editing `docker/Dockerfile.dev` and changing:
+The first build takes 20 to 40 minutes depending on your machine. If you have more than 16 GB of RAM, you can speed up the PX4 compile step by editing `docker/Dockerfile.dev` and changing:
 
 ```
-MAKEFLAGS="-j2"   →   MAKEFLAGS="-j4"
+MAKEFLAGS="-j2"
+```
+
+to:
+
+```
+MAKEFLAGS="-j4"
 ```
 
 ---
 
-## 5 — Run
+## Run the Simulation
 
 ```bash
 docker compose -f docker-compose.dev.yml up
 ```
 
-The Gazebo GUI will appear on your desktop (or forwarded via XQuartz on macOS).
+The Gazebo window will appear on your desktop.
 
-### Headless / VNC mode
+### Headless Mode (No Display)
 
-If you are on a server with no display, remove the `DISPLAY` and `/tmp/.X11-unix` entries from `docker-compose.dev.yml` and connect a VNC viewer to `localhost:5900` with password `px4vnc`.
+If you are running on a server with no display, remove the `DISPLAY` and `/tmp/.X11-unix` entries from `docker-compose.dev.yml` and connect a VNC viewer to `localhost:5900`. The password is `px4vnc`.
+
+### Stop
+
+```bash
+docker compose -f docker-compose.dev.yml down
+```
 
 ---
 
-## 6 — Build your ROS 2 workspace (first time)
+## Build the ROS 2 Workspace
+
+This only needs to be done the first time, or whenever you add new packages.
 
 Open a shell inside the running container:
 
@@ -130,7 +216,7 @@ Open a shell inside the running container:
 docker exec -it drone_sim_dev bash
 ```
 
-Then build:
+Then build the workspace:
 
 ```bash
 cd /drone_sim/ros2_ws
@@ -139,29 +225,7 @@ colcon build --symlink-install
 
 ---
 
-## 7 — OAK-D Pro USB access (Linux only)
-
-If you're using the OAK-D Pro camera, add udev rules so the container can access the USB device:
-
-```bash
-echo 'SUBSYSTEM=="usb", ATTRS{idVendor}=="03e7", MODE="0666"' \
-  | sudo tee /etc/udev/rules.d/80-movidius.rules
-sudo udevadm control --reload-rules && sudo udevadm trigger
-```
-
-Replug the camera after running these commands.
-
----
-
-## 8 — Stop
-
-```bash
-docker compose -f docker-compose.dev.yml down
-```
-
----
-
-## Repository structure
+## Repository Structure
 
 ```
 Simulation/
@@ -171,38 +235,38 @@ Simulation/
 │
 ├── docker/
 │   ├── Dockerfile.dev       # container image definition
-│   └── entrypoint.sh        # ROS 2 env setup at container start
+│   └── entrypoint.sh        # ROS 2 environment setup at container start
 │
 ├── worlds/
-│   └── outdoor_field.sdf    # default Gazebo world (required)
+│   └── outdoor_field.sdf    # default Gazebo world
 │
 ├── models/
 │   └── your_drone/          # drone model files (.sdf, .config, meshes/)
 │
 ├── ros2_ws/
-│   └── src/                 # your ROS 2 packages (build/ install/ log/ are generated)
+│   └── src/                 # ROS 2 packages
 │
-├── config/                  # ROS 2 params, flight configs (optional)
-└── scripts/                 # helper scripts (optional)
+├── config/                  # ROS 2 params and flight configs
+└── scripts/                 # helper scripts
 ```
 
-The `ros2_ws/build/`, `ros2_ws/install/`, and `ros2_ws/log/` directories are generated inside the container and can be deleted safely — they'll be recreated on the next `colcon build`.
+The `ros2_ws/build/`, `ros2_ws/install/`, and `ros2_ws/log/` directories are generated by `colcon` and can be safely deleted. They will be recreated on the next build.
 
 ---
 
 ## Troubleshooting
 
 **`could not select device driver "nvidia"`**  
-The `deploy.resources` GPU block is still in your compose file. Delete it — this setup uses Mesa software rendering and does not require an Nvidia GPU.
+Remove the `deploy.resources` GPU block from your compose file. This setup uses Mesa software rendering and does not need an Nvidia GPU.
 
 **`Authorization required` / `could not connect to display`**  
-Redo step 3. Make sure `$DISPLAY` is set and the xauth cookie file exists at `/tmp/.docker.xauth`.
+Redo the X11 display setup for your platform. Make sure `$DISPLAY` is set and `/tmp/.docker.xauth` exists.
 
 **`/tmp/.docker.xauth: no such file or directory`**  
 Run `touch /tmp/.docker.xauth` before the `xauth nmerge` command.
 
 **Gazebo opens but is very slow**  
-Expected on a VM with no GPU — the renderer is running in software (llvmpipe). Reduce world complexity or lower Gazebo's render resolution in the world `.sdf` file.
+Expected on a VM without GPU acceleration. The renderer falls back to llvmpipe (software). Lower world complexity or reduce the render resolution in `worlds/outdoor_field.sdf`.
 
 **`colcon build` fails inside the container**  
-Make sure the workspace is mounted: `ls /drone_sim/ros2_ws/src` should list your packages. If it's empty, check the volume mounts in `docker-compose.dev.yml`.'
+Confirm the workspace is mounted correctly: `ls /drone_sim/ros2_ws/src` should list your packages. If the directory is empty, check the volume mounts in `docker-compose.dev.yml`.
