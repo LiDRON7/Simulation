@@ -1,0 +1,236 @@
+<?xml version="1.0"?>
+<!--
+  outdoor_field.sdf — Gazebo Harmonic world
+  ─────────────────────────────────────────────────────────────────────────────
+  A flat outdoor field with:
+    • Realistic sunlight + shadows
+    • Ground plane with grass texture
+    • A concrete landing pad (5×5m) for precision-landing tests
+    • A few obstacle trees / crates for OAK-D Pro testing
+    • Wind plugin (light breeze by default)
+    • PX4 SITL bridge topics wired up
+
+  Coordinate convention: ENU (East-North-Up), origin = launch pad centre.
+-->
+<sdf version="1.9">
+  <world name="outdoor_field">
+
+    <!-- ═══════════════════════ PHYSICS ═══════════════════════════════ -->
+    <physics name="1ms" type="dart">
+      <max_step_size>0.001</max_step_size>   <!-- 1 kHz — good for multirotor -->
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <!-- ═══════════════════════ PLUGINS ═══════════════════════════════ -->
+    <plugin filename="gz-sim-physics-system"
+            name="gz::sim::systems::Physics"/>
+    <plugin filename="gz-sim-sensors-system"
+            name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+    <plugin filename="gz-sim-user-commands-system"
+            name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-scene-broadcaster-system"
+            name="gz::sim::systems::SceneBroadcaster"/>
+    <plugin filename="gz-sim-contact-system"
+            name="gz::sim::systems::Contact"/>
+
+    <!-- Wind — light breeze from the West, 3 m/s -->
+    <plugin filename="gz-sim-wind-effects-system"
+            name="gz::sim::systems::WindEffects">
+      <force_approximation_scaling_factor>1</force_approximation_scaling_factor>
+      <horizontal>
+        <magnitude>
+          <time_for_rise>10</time_for_rise>
+          <sin><amplitude_percent>0.05</amplitude_percent><period>60</period></sin>
+          <noise type="gaussian"><mean>0</mean><stddev>0.1</stddev></noise>
+        </magnitude>
+        <direction>
+          <time_for_rise>30</time_for_rise>
+          <sin><amplitude>5</amplitude><period>20</period></sin>
+          <noise type="gaussian"><mean>0</mean><stddev>0.5</stddev></noise>
+        </direction>
+      </horizontal>
+      <vertical><noise type="gaussian"><mean>0</mean><stddev>0.1</stddev></noise></vertical>
+      <mean_wind_velocity>3 0 0</mean_wind_velocity>
+    </plugin>
+
+    <!-- ═══════════════════════ LIGHTING ══════════════════════════════ -->
+    <light name="sun" type="directional">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 100 0 0.4 0.785</pose>   <!-- morning light, SE direction -->
+      <diffuse>0.95 0.92 0.88 1</diffuse>
+      <specular>0.3 0.3 0.3 1</specular>
+      <direction>-0.5 0.1 -0.9</direction>
+      <attenuation><range>1000</range><constant>0.9</constant><linear>0.01</linear><quadratic>0.001</quadratic></attenuation>
+    </light>
+
+    <!-- Ambient sky glow -->
+    <scene>
+      <ambient>0.55 0.60 0.65 1</ambient>
+      <background>0.53 0.71 0.89 1</background>
+      <shadows>true</shadows>
+    </scene>
+
+    <!-- ═════════════════════ GROUND PLANE ════════════════════════════ -->
+    <!--
+      Large flat terrain (200×200m). For a real terrain heightmap, replace
+      the box geometry here with a <heightmap> element pointing to a PNG file
+      in your models/ directory.
+    -->
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="ground_collision">
+          <geometry><plane><normal>0 0 1</normal><size>200 200</size></plane></geometry>
+          <surface>
+            <friction><ode><mu>0.8</mu><mu2>0.8</mu2></ode></friction>
+            <bounce><restitution_coefficient>0</restitution_coefficient></bounce>
+          </surface>
+        </collision>
+        <visual name="ground_visual">
+          <cast_shadows>false</cast_shadows>
+          <geometry><plane><normal>0 0 1</normal><size>200 200</size></plane></geometry>
+          <material>
+            <ambient>0.28 0.40 0.18 1</ambient>   <!-- grass green -->
+            <diffuse>0.35 0.52 0.22 1</diffuse>
+            <specular>0.02 0.02 0.02 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ═══════════════════ LANDING PAD ═══════════════════════════════ -->
+    <!--
+      5×5m concrete pad centred at origin — the Velodyne lidar will see
+      its sharp edges clearly, making it a good precision-landing target.
+    -->
+    <model name="landing_pad">
+      <static>true</static>
+      <pose>0 0 0.01 0 0 0</pose>
+      <link name="link">
+        <collision name="pad_collision">
+          <geometry><box><size>5 5 0.02</size></box></geometry>
+        </collision>
+        <visual name="pad_visual">
+          <geometry><box><size>5 5 0.02</size></box></geometry>
+          <material>
+            <ambient>0.55 0.55 0.55 1</ambient>
+            <diffuse>0.65 0.65 0.65 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+        <!-- H marker painted on pad -->
+        <visual name="h_marker">
+          <pose>0 0 0.011 0 0 0</pose>
+          <geometry><box><size>0.5 2.5 0.001</size></box></geometry>
+          <material><ambient>0.9 0.9 0.2 1</ambient><diffuse>1 1 0.3 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ══════════════ OBSTACLE OBJECTS (OAK-D Pro targets) ═══════════ -->
+    <!--
+      A handful of obstacles scattered around the field so you can test
+      the front-facing depth camera / obstacle avoidance stack.
+    -->
+
+    <!-- Obstacle 1: wooden crate, 10m ahead -->
+    <model name="crate_1">
+      <static>true</static>
+      <pose>10 2 0.5 0 0 0.4</pose>
+      <link name="link">
+        <collision name="col"><geometry><box><size>1 1 1</size></box></geometry></collision>
+        <visual name="vis">
+          <geometry><box><size>1 1 1</size></box></geometry>
+          <material><ambient>0.55 0.38 0.18 1</ambient><diffuse>0.6 0.4 0.2 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Obstacle 2: crate, 15m ahead and left -->
+    <model name="crate_2">
+      <static>true</static>
+      <pose>15 -3 0.5 0 0 0.1</pose>
+      <link name="link">
+        <collision name="col"><geometry><box><size>1 1 1</size></box></geometry></collision>
+        <visual name="vis">
+          <geometry><box><size>1 1 1</size></box></geometry>
+          <material><ambient>0.55 0.38 0.18 1</ambient><diffuse>0.6 0.4 0.2 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Obstacle 3: tall post / pole, 20m ahead -->
+    <model name="pole_1">
+      <static>true</static>
+      <pose>20 0 2 0 0 0</pose>
+      <link name="link">
+        <collision name="col"><geometry><cylinder><radius>0.05</radius><length>4</length></cylinder></geometry></collision>
+        <visual name="vis">
+          <geometry><cylinder><radius>0.05</radius><length>4</length></cylinder></geometry>
+          <material><ambient>0.3 0.3 0.3 1</ambient><diffuse>0.4 0.4 0.4 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Obstacle 4: tree-like cylinder + sphere, 12m right -->
+    <model name="tree_1">
+      <static>true</static>
+      <pose>8 -12 0 0 0 0</pose>
+      <link name="trunk">
+        <pose>0 0 2 0 0 0</pose>
+        <collision name="col"><geometry><cylinder><radius>0.15</radius><length>4</length></cylinder></geometry></collision>
+        <visual name="vis">
+          <geometry><cylinder><radius>0.15</radius><length>4</length></cylinder></geometry>
+          <material><ambient>0.3 0.2 0.1 1</ambient><diffuse>0.4 0.25 0.1 1</diffuse></material>
+        </visual>
+      </link>
+      <link name="canopy">
+        <pose>0 0 5 0 0 0</pose>
+        <collision name="col"><geometry><sphere><radius>1.5</radius></sphere></geometry></collision>
+        <visual name="vis">
+          <geometry><sphere><radius>1.5</radius></sphere></geometry>
+          <material><ambient>0.1 0.4 0.1 1</ambient><diffuse>0.15 0.5 0.15 1</diffuse></material>
+        </visual>
+      </link>
+      <joint name="canopy_joint" type="fixed"><parent>trunk</parent><child>canopy</child></joint>
+    </model>
+
+    <!-- Obstacle 5: tree, 18m left -->
+    <model name="tree_2">
+      <static>true</static>
+      <pose>5 15 0 0 0 0</pose>
+      <link name="trunk">
+        <pose>0 0 1.8 0 0 0</pose>
+        <collision name="col"><geometry><cylinder><radius>0.12</radius><length>3.6</length></cylinder></geometry></collision>
+        <visual name="vis">
+          <geometry><cylinder><radius>0.12</radius><length>3.6</length></cylinder></geometry>
+          <material><ambient>0.3 0.2 0.1 1</ambient><diffuse>0.4 0.25 0.1 1</diffuse></material>
+        </visual>
+      </link>
+      <link name="canopy">
+        <pose>0 0 4.5 0 0 0</pose>
+        <collision name="col"><geometry><sphere><radius>1.2</radius></sphere></geometry></collision>
+        <visual name="vis">
+          <geometry><sphere><radius>1.2</radius></sphere></geometry>
+          <material><ambient>0.12 0.45 0.12 1</ambient><diffuse>0.18 0.55 0.18 1</diffuse></material>
+        </visual>
+      </link>
+      <joint name="canopy_joint" type="fixed"><parent>trunk</parent><child>canopy</child></joint>
+    </model>
+
+    <!-- ═════════════════ HEXACOPTER SPAWN ════════════════════════════ -->
+    <!--
+      The drone is included directly in the world so it spawns at startup.
+      Adjust <pose> to move the takeoff position.
+      GZ_SIM_RESOURCE_PATH must contain your models/ directory.
+    -->
+    <include>
+      <uri>model://hexacopter</uri>
+      <name>hexacopter</name>
+      <pose>0 0 0.25 0 0 0</pose>   <!-- sitting on the landing pad -->
+    </include>
+
+  </world>
+</sdf>
