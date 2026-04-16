@@ -24,6 +24,14 @@ RUN apt-get update && apt-get install -y \
     htop \
     && rm -rf /var/lib/apt/lists/*
 
+# ─── Software rendering fallback (for non-GPU hosts e.g. Mac VMs) ────────────
+# libgl1-mesa-dri   →  provides the llvmpipe / softpipe drivers
+# libglx-mesa0      →  Mesa GLX so the X11 OpenGL path works without a GPU
+RUN apt-get update && apt-get install -y \
+    libgl1-mesa-dri \
+    libglx-mesa0 \
+    && rm -rf /var/lib/apt/lists/*
+
 # ─── Shell environment ────────────────────────────────────────────────────────
 RUN echo "source /opt/ros/jazzy/setup.bash" >> ~/.bashrc \
     # Tell Gazebo where to find your custom models and worlds
