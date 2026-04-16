@@ -1,4 +1,4 @@
-# Drone Simulation
+# LiDRON Simulation Environment
 
 ROS 2 Jazzy · Gazebo Harmonic · PX4 · Docker
 
@@ -10,6 +10,7 @@ ROS 2 Jazzy · Gazebo Harmonic · PX4 · Docker
 - [Requirements](#requirements)
 - [Setup: Linux (Ubuntu 24.04)](#setup-linux-ubuntu-2404)
 - [Setup: macOS (via UTM Virtual Machine)](#setup-macos-via-utm-virtual-machine)
+- [Setup: Windows (via WSL 2)](#setup-windows-via-wsl-2)
 - [Build the Image](#build-the-image)
 - [Run the Simulation](#run-the-simulation)
 - [Build the ROS 2 Workspace](#build-the-ros-2-workspace)
@@ -26,12 +27,12 @@ This repository packages a full drone simulation stack inside Docker. Gazebo han
 
 ## Requirements
 
-| Tool                  | Version |
-| --------------------- | ------- |
-| Docker Engine         | 24+     |
-| Docker Compose plugin | v2+     |
-| Git                   | any     |
-| UTM _(macOS only)_    | 4+      |
+| Tool | Version |
+|------|---------|
+| Docker Engine | 24+ |
+| Docker Compose plugin | v2+ |
+| Git | any |
+| UTM *(macOS only)* | 4+ |
 
 ---
 
@@ -159,6 +160,89 @@ echo $DISPLAY
 ```
 
 It should print something like `:0` or `:1`. If it is empty, run:
+
+```bash
+export DISPLAY=:0
+```
+
+---
+
+## Setup: Windows (via WSL 2)
+
+Gazebo and Docker run inside a WSL 2 Ubuntu environment. The Gazebo GUI is handled by WSLg, which is built into Windows 11 and recent Windows 10 builds — no third-party X server needed.
+
+### 1. Enable WSL 2
+
+Open PowerShell as Administrator and run:
+
+```powershell
+wsl --install
+```
+
+This installs WSL 2 and Ubuntu by default. Restart your machine when prompted.
+
+If WSL was already installed but on version 1, upgrade it:
+
+```powershell
+wsl --set-default-version 2
+```
+
+### 2. Open Ubuntu
+
+Launch Ubuntu from the Start menu. On first run it will ask you to create a user and password.
+
+Verify WSLg is working by running a simple GUI app:
+
+```bash
+sudo apt update
+sudo apt install x11-apps -y
+xeyes
+```
+
+A small window with eyes should appear on your Windows desktop. If it does, WSLg is working and Gazebo will render the same way. Close it and continue.
+
+### 3. Install Docker
+
+Do not install Docker Desktop. Run the official script inside Ubuntu:
+
+```bash
+curl -fsSL https://get.docker.com -o get-docker.sh
+sh get-docker.sh
+sudo usermod -aG docker $USER
+newgrp docker
+sudo apt-get install docker-compose-plugin
+```
+
+Verify:
+
+```bash
+docker version
+docker compose version
+```
+
+### 4. Clone the Repository
+
+```bash
+git clone https://github.com/LiDRON7/Simulation.git
+cd Simulation
+cp .env.example .env
+```
+
+### 5. Configure X11 Display Access
+
+```bash
+xhost +local:docker
+touch /tmp/.docker.xauth
+xauth nlist $DISPLAY | sed -e 's/^..../ffff/' | xauth -f /tmp/.docker.xauth nmerge -
+```
+
+Confirm your display variable is set:
+
+```bash
+echo $DISPLAY
+```
+
+It should print something like `:0`. If it is empty, run:
 
 ```bash
 export DISPLAY=:0
