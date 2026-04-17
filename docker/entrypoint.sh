@@ -13,6 +13,5 @@ if [ -f /drone_sim/ros2_ws/install/setup.bash ]; then
 fi
 
 # Point Gazebo at your mounted model & world directories
-export GZ_SIM_RESOURCE_PATH=/drone_sim/models:/drone_sim/worlds:${GZ_SIM_RESOURCE_PATH}
-
+export GZ_SIM_RESOURCE_PATH=/drone_sim/models:/drone_sim/worlds:/drone_sim/px4_models:$GZ_SIM_RESOURCE_PATH
 exec "$@"

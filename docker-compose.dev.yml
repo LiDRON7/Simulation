@@ -21,3 +21,4 @@ services:
       - ./config:/drone_sim/config
       - ./scripts:/drone_sim/scripts
       - ./ros2_ws:/drone_sim/ros2_ws
+      - ~/PX4-gazebo-models/models:/drone_sim/px4_models
