@@ -8,6 +8,7 @@ ROS 2 Jazzy · Gazebo Harmonic · PX4 · Docker
 
 - [Overview](#overview)
 - [Requirements](#requirements)
+- [GPU Configuration](#gpu-configuration)
 - [Setup: Linux (Ubuntu 24.04)](#setup-linux-ubuntu-2404)
 - [Setup: macOS (via UTM Virtual Machine)](#setup-macos-via-utm-virtual-machine)
 - [Setup: Windows (via WSL 2)](#setup-windows-via-wsl-2)
@@ -28,12 +29,47 @@ This repository packages a full drone simulation stack inside Docker. Gazebo han
 
 ## Requirements
 
-| Tool | Version |
-|------|---------|
-| Docker Engine | 24+ |
-| Docker Compose plugin | v2+ |
-| Git | any |
-| UTM *(macOS only)* | 4+ |
+| Tool                  | Version |
+| --------------------- | ------- |
+| Docker Engine         | 24+     |
+| Docker Compose plugin | v2+     |
+| Git                   | any     |
+| UTM _(macOS only)_    | 4+      |
+
+---
+
+## GPU Configuration
+
+> **Do this before running any setup steps.** The `.env` file controls which GPU driver the container uses. Choosing the wrong setting (or skipping this step) is the most common cause of Gazebo rendering failures.
+
+After cloning the repository, copy the example env file:
+
+```bash
+cp .env.example .env
+```
+
+Then open `.env` and uncomment the block that matches your hardware:
+
+```bash
+# Copy this file to .env and uncomment your GPU type
+# cp .env.example .env
+
+# ── No GPU / Apple Silicon VM (default, no changes needed) ────────────────
+# Nothing to set, software rendering is the default
+
+# ── NVIDIA GPU ────────────────────────────────────────────────────────────
+# DOCKER_RUNTIME=nvidia
+# NVIDIA_VISIBLE_DEVICES=all
+# GPU_VENDOR=nvidia
+
+# ── AMD GPU ───────────────────────────────────────────────────────────────
+# GPU_VENDOR=amd
+
+# ── Intel GPU ─────────────────────────────────────────────────────────────
+# GPU_VENDOR=intel
+```
+
+If you are unsure, leave everything commented out. The default is software rendering (Mesa/llvmpipe), which works everywhere but runs slower — see [Troubleshooting](#troubleshooting) if Gazebo is too slow.
 
 ---
 
@@ -76,7 +112,7 @@ cd Simulation
 cp .env.example .env
 ```
 
-Edit `.env` if you need to adjust any ports or paths.
+Edit `.env` to set your GPU type — see [GPU Configuration](#gpu-configuration) above.
 
 ### Configure X11 Display Access
 
@@ -176,6 +212,8 @@ cd Simulation
 cp .env.example .env
 ```
 
+Edit `.env` to set your GPU type — see [GPU Configuration](#gpu-configuration) above. For an Apple Silicon VM, the default (everything commented out) is correct.
+
 ### 6. Configure X11 Display Access
 
 **Step 1 — Confirm your display variable is set:**
@@ -268,6 +306,8 @@ git clone https://github.com/LiDRON7/Simulation.git
 cd Simulation
 cp .env.example .env
 ```
+
+Edit `.env` to set your GPU type — see [GPU Configuration](#gpu-configuration) above.
 
 ### 5. Configure X11 Display Access
 
@@ -375,20 +415,20 @@ python3 Tools/mavlink_shell.py
 
 Once connected you will see the `nsh>` prompt. Useful commands:
 
-| Command | Description |
-|---------|-------------|
-| `commander status` | Show arming state, flight mode, and health flags |
-| `commander arm` | Arm the drone (requires no failsafes active) |
-| `commander disarm` | Disarm the drone |
-| `commander takeoff` | Take off to the default altitude |
-| `commander land` | Land at the current position |
-| `commander mode posctl` | Switch to Position Control mode |
-| `commander mode offboard` | Switch to Offboard mode (needed for ROS 2 control) |
-| `param show <name>` | Print the value of a parameter |
-| `param set <name> <value>` | Set a parameter (e.g. `param set MPC_XY_VEL_MAX 5.0`) |
-| `listener vehicle_local_position` | Stream position estimates to the terminal |
-| `listener vehicle_status` | Stream vehicle status |
-| `top` | Show PX4 task CPU and memory usage |
+| Command                           | Description                                           |
+| --------------------------------- | ----------------------------------------------------- |
+| `commander status`                | Show arming state, flight mode, and health flags      |
+| `commander arm`                   | Arm the drone (requires no failsafes active)          |
+| `commander disarm`                | Disarm the drone                                      |
+| `commander takeoff`               | Take off to the default altitude                      |
+| `commander land`                  | Land at the current position                          |
+| `commander mode posctl`           | Switch to Position Control mode                       |
+| `commander mode offboard`         | Switch to Offboard mode (needed for ROS 2 control)    |
+| `param show <name>`               | Print the value of a parameter                        |
+| `param set <name> <value>`        | Set a parameter (e.g. `param set MPC_XY_VEL_MAX 5.0`) |
+| `listener vehicle_local_position` | Stream position estimates to the terminal             |
+| `listener vehicle_status`         | Stream vehicle status                                 |
+| `top`                             | Show PX4 task CPU and memory usage                    |
 
 Exit the shell with `Ctrl+C` or type `exit`.
 
@@ -412,17 +452,17 @@ ros2 topic list
 
 **Common topics published by PX4 via `px4_ros_com`:**
 
-| Topic | Message Type | Description |
-|-------|-------------|-------------|
-| `/fmu/out/vehicle_local_position` | `px4_msgs/VehicleLocalPosition` | NED position and velocity estimate |
-| `/fmu/out/vehicle_global_position` | `px4_msgs/VehicleGlobalPosition` | GPS latitude, longitude, altitude |
-| `/fmu/out/vehicle_attitude` | `px4_msgs/VehicleAttitude` | Orientation quaternion |
-| `/fmu/out/vehicle_status` | `px4_msgs/VehicleStatus` | Arming state, nav state, flight mode |
-| `/fmu/out/sensor_combined` | `px4_msgs/SensorCombined` | Raw IMU (gyro + accelerometer) |
-| `/fmu/out/battery_status` | `px4_msgs/BatteryStatus` | Battery voltage and percentage |
-| `/fmu/in/trajectory_setpoint` | `px4_msgs/TrajectorySetpoint` | Send position/velocity setpoints |
-| `/fmu/in/vehicle_command` | `px4_msgs/VehicleCommand` | Send MAVLink commands (arm, mode changes) |
-| `/fmu/in/offboard_control_mode` | `px4_msgs/OffboardControlMode` | Enable offboard control heartbeat |
+| Topic                              | Message Type                     | Description                               |
+| ---------------------------------- | -------------------------------- | ----------------------------------------- |
+| `/fmu/out/vehicle_local_position`  | `px4_msgs/VehicleLocalPosition`  | NED position and velocity estimate        |
+| `/fmu/out/vehicle_global_position` | `px4_msgs/VehicleGlobalPosition` | GPS latitude, longitude, altitude         |
+| `/fmu/out/vehicle_attitude`        | `px4_msgs/VehicleAttitude`       | Orientation quaternion                    |
+| `/fmu/out/vehicle_status`          | `px4_msgs/VehicleStatus`         | Arming state, nav state, flight mode      |
+| `/fmu/out/sensor_combined`         | `px4_msgs/SensorCombined`        | Raw IMU (gyro + accelerometer)            |
+| `/fmu/out/battery_status`          | `px4_msgs/BatteryStatus`         | Battery voltage and percentage            |
+| `/fmu/in/trajectory_setpoint`      | `px4_msgs/TrajectorySetpoint`    | Send position/velocity setpoints          |
+| `/fmu/in/vehicle_command`          | `px4_msgs/VehicleCommand`        | Send MAVLink commands (arm, mode changes) |
+| `/fmu/in/offboard_control_mode`    | `px4_msgs/OffboardControlMode`   | Enable offboard control heartbeat         |
 
 **Subscribe to a topic and print messages:**
 
@@ -445,13 +485,13 @@ ros2 interface show px4_msgs/msg/VehicleLocalPosition
 
 **Camera and sensor topics (if the OakD-Lite model is loaded):**
 
-| Topic | Description |
-|-------|-------------|
-| `/drone/camera/image_raw` | RGB image from the forward camera |
-| `/drone/camera/camera_info` | Camera intrinsics |
-| `/drone/stereo/left/image_raw` | Left stereo image |
-| `/drone/stereo/right/image_raw` | Right stereo image |
-| `/drone/depth/image_raw` | Depth image |
+| Topic                           | Description                       |
+| ------------------------------- | --------------------------------- |
+| `/drone/camera/image_raw`       | RGB image from the forward camera |
+| `/drone/camera/camera_info`     | Camera intrinsics                 |
+| `/drone/stereo/left/image_raw`  | Left stereo image                 |
+| `/drone/stereo/right/image_raw` | Right stereo image                |
+| `/drone/depth/image_raw`        | Depth image                       |
 
 **View the node graph** (run outside the container, requires `rqt` installed on the host):
 
@@ -492,7 +532,7 @@ colcon build --symlink-install
 Simulation/
 ├── docker-compose.dev.yml   # main compose file
 ├── .env                     # local config (gitignored, copy from .env.example)
-├── .env.example             # template
+├── .env.example             # GPU and port configuration template — copy to .env before building
 │
 ├── docker/
 │   ├── Dockerfile.dev       # container image definition
@@ -519,6 +559,9 @@ The `ros2_ws/build/`, `ros2_ws/install/`, and `ros2_ws/log/` directories are gen
 
 **`could not select device driver "nvidia"`**  
 Remove the `deploy.resources` GPU block from your compose file. This setup uses Mesa software rendering and does not need an Nvidia GPU.
+
+**Gazebo crashes immediately or shows a black window**  
+Your `GPU_VENDOR` setting in `.env` may not match your hardware. Open `.env`, comment out all GPU lines to fall back to software rendering, then run `docker compose -f docker-compose.dev.yml down && docker compose -f docker-compose.dev.yml up` to confirm the issue is GPU-related before re-enabling your GPU block.
 
 **`Authorization required` / `could not connect to display`**  
 Redo the X11 display setup for your platform. Make sure `$DISPLAY` is set and the `xauth list` verification step shows at least one entry.
