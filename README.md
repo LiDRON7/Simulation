@@ -13,6 +13,7 @@ ROS 2 Jazzy · Gazebo Harmonic · PX4 · Docker
 - [Setup: Windows (via WSL 2)](#setup-windows-via-wsl-2)
 - [Build the Image](#build-the-image)
 - [Run the Simulation](#run-the-simulation)
+- [Using the Container](#using-the-container)
 - [Build the ROS 2 Workspace](#build-the-ros-2-workspace)
 - [Repository Structure](#repository-structure)
 - [Troubleshooting](#troubleshooting)
@@ -79,13 +80,43 @@ Edit `.env` if you need to adjust any ports or paths.
 
 ### Configure X11 Display Access
 
-Run this before starting the container each session. It grants Docker access to your local display so the Gazebo GUI can appear.
+This must be repeated after every reboot. It grants the container permission to open windows on your local display.
+
+**Step 1 — Confirm your display variable is set:**
+
+```bash
+echo $DISPLAY
+```
+
+It should print something like `:0` or `:1`. If it is empty, set it manually:
+
+```bash
+export DISPLAY=:0
+```
+
+Do not continue until `$DISPLAY` is non-empty. The `xauth` command will produce no output and write nothing to the auth file if `$DISPLAY` is unset, and Gazebo will fail to open a window.
+
+**Step 2 — Grant Docker access and create the auth file:**
 
 ```bash
 xhost +local:docker
 touch /tmp/.docker.xauth
 xauth nlist $DISPLAY | sed -e 's/^..../ffff/' | xauth -f /tmp/.docker.xauth nmerge -
 ```
+
+**Step 3 — Verify the auth file has entries:**
+
+```bash
+xauth -f /tmp/.docker.xauth list
+```
+
+You should see at least one line containing your display number and a hex key, for example:
+
+```
+hostname/unix:0  MIT-MAGIC-COOKIE-1  <hex string>
+```
+
+If the output is empty, `$DISPLAY` was not set correctly in Step 1. Fix it and repeat from Step 2.
 
 You are ready to [build](#build-the-image).
 
@@ -147,13 +178,7 @@ cp .env.example .env
 
 ### 6. Configure X11 Display Access
 
-```bash
-xhost +local:docker
-touch /tmp/.docker.xauth
-xauth nlist $DISPLAY | sed -e 's/^..../ffff/' | xauth -f /tmp/.docker.xauth nmerge -
-```
-
-Confirm your display variable is set:
+**Step 1 — Confirm your display variable is set:**
 
 ```bash
 echo $DISPLAY
@@ -164,6 +189,22 @@ It should print something like `:0` or `:1`. If it is empty, run:
 ```bash
 export DISPLAY=:0
 ```
+
+**Step 2 — Grant Docker access and create the auth file:**
+
+```bash
+xhost +local:docker
+touch /tmp/.docker.xauth
+xauth nlist $DISPLAY | sed -e 's/^..../ffff/' | xauth -f /tmp/.docker.xauth nmerge -
+```
+
+**Step 3 — Verify the auth file has entries:**
+
+```bash
+xauth -f /tmp/.docker.xauth list
+```
+
+At least one line should appear. If the output is empty, revisit Step 1.
 
 ---
 
@@ -230,13 +271,7 @@ cp .env.example .env
 
 ### 5. Configure X11 Display Access
 
-```bash
-xhost +local:docker
-touch /tmp/.docker.xauth
-xauth nlist $DISPLAY | sed -e 's/^..../ffff/' | xauth -f /tmp/.docker.xauth nmerge -
-```
-
-Confirm your display variable is set:
+**Step 1 — Confirm your display variable is set:**
 
 ```bash
 echo $DISPLAY
@@ -247,6 +282,22 @@ It should print something like `:0`. If it is empty, run:
 ```bash
 export DISPLAY=:0
 ```
+
+**Step 2 — Grant Docker access and create the auth file:**
+
+```bash
+xhost +local:docker
+touch /tmp/.docker.xauth
+xauth nlist $DISPLAY | sed -e 's/^..../ffff/' | xauth -f /tmp/.docker.xauth nmerge -
+```
+
+**Step 3 — Verify the auth file has entries:**
+
+```bash
+xauth -f /tmp/.docker.xauth list
+```
+
+At least one line should appear. If the output is empty, revisit Step 1.
 
 ---
 
@@ -276,7 +327,7 @@ MAKEFLAGS="-j4"
 docker compose -f docker-compose.dev.yml up
 ```
 
-The Gazebo window will appear on your desktop.
+The Gazebo window will appear on your desktop. The `drone_px4` container waits 8 seconds for Gazebo to finish loading before PX4 starts — this is normal.
 
 ### Headless Mode (No Display)
 
@@ -286,6 +337,132 @@ If you are running on a server with no display, remove the `DISPLAY` and `/tmp/.
 
 ```bash
 docker compose -f docker-compose.dev.yml down
+```
+
+---
+
+## Using the Container
+
+### Open a Shell
+
+Open an interactive shell inside the simulation container:
+
+```bash
+docker exec -it drone_sim_dev bash
+```
+
+Or inside the PX4 container:
+
+```bash
+docker exec -it drone_px4 bash
+```
+
+The ROS 2 environment is sourced automatically by the entrypoint, so `ros2` commands work immediately in any shell you open this way.
+
+---
+
+### PX4 Commands
+
+PX4 exposes a MAVLink shell over UDP. The recommended way to send commands interactively is via the `mavlink_shell.py` script included with PX4.
+
+**Open the MAVLink shell:**
+
+```bash
+docker exec -it drone_px4 bash
+cd /px4
+python3 Tools/mavlink_shell.py
+```
+
+Once connected you will see the `nsh>` prompt. Useful commands:
+
+| Command | Description |
+|---------|-------------|
+| `commander status` | Show arming state, flight mode, and health flags |
+| `commander arm` | Arm the drone (requires no failsafes active) |
+| `commander disarm` | Disarm the drone |
+| `commander takeoff` | Take off to the default altitude |
+| `commander land` | Land at the current position |
+| `commander mode posctl` | Switch to Position Control mode |
+| `commander mode offboard` | Switch to Offboard mode (needed for ROS 2 control) |
+| `param show <name>` | Print the value of a parameter |
+| `param set <name> <value>` | Set a parameter (e.g. `param set MPC_XY_VEL_MAX 5.0`) |
+| `listener vehicle_local_position` | Stream position estimates to the terminal |
+| `listener vehicle_status` | Stream vehicle status |
+| `top` | Show PX4 task CPU and memory usage |
+
+Exit the shell with `Ctrl+C` or type `exit`.
+
+**Arm and take off in one sequence (quick test):**
+
+```bash
+commander arm && commander takeoff
+```
+
+---
+
+### ROS 2 Topics
+
+All ROS 2 commands below run inside the `drone_sim_dev` container.
+
+**List all active topics:**
+
+```bash
+ros2 topic list
+```
+
+**Common topics published by PX4 via `px4_ros_com`:**
+
+| Topic | Message Type | Description |
+|-------|-------------|-------------|
+| `/fmu/out/vehicle_local_position` | `px4_msgs/VehicleLocalPosition` | NED position and velocity estimate |
+| `/fmu/out/vehicle_global_position` | `px4_msgs/VehicleGlobalPosition` | GPS latitude, longitude, altitude |
+| `/fmu/out/vehicle_attitude` | `px4_msgs/VehicleAttitude` | Orientation quaternion |
+| `/fmu/out/vehicle_status` | `px4_msgs/VehicleStatus` | Arming state, nav state, flight mode |
+| `/fmu/out/sensor_combined` | `px4_msgs/SensorCombined` | Raw IMU (gyro + accelerometer) |
+| `/fmu/out/battery_status` | `px4_msgs/BatteryStatus` | Battery voltage and percentage |
+| `/fmu/in/trajectory_setpoint` | `px4_msgs/TrajectorySetpoint` | Send position/velocity setpoints |
+| `/fmu/in/vehicle_command` | `px4_msgs/VehicleCommand` | Send MAVLink commands (arm, mode changes) |
+| `/fmu/in/offboard_control_mode` | `px4_msgs/OffboardControlMode` | Enable offboard control heartbeat |
+
+**Subscribe to a topic and print messages:**
+
+```bash
+ros2 topic echo /fmu/out/vehicle_local_position
+```
+
+**Check the publish rate of a topic:**
+
+```bash
+ros2 topic hz /fmu/out/vehicle_local_position
+```
+
+**Inspect the message type and field definitions:**
+
+```bash
+ros2 topic info /fmu/out/vehicle_local_position
+ros2 interface show px4_msgs/msg/VehicleLocalPosition
+```
+
+**Camera and sensor topics (if the OakD-Lite model is loaded):**
+
+| Topic | Description |
+|-------|-------------|
+| `/drone/camera/image_raw` | RGB image from the forward camera |
+| `/drone/camera/camera_info` | Camera intrinsics |
+| `/drone/stereo/left/image_raw` | Left stereo image |
+| `/drone/stereo/right/image_raw` | Right stereo image |
+| `/drone/depth/image_raw` | Depth image |
+
+**View the node graph** (run outside the container, requires `rqt` installed on the host):
+
+```bash
+rqt_graph
+```
+
+Or inside the container:
+
+```bash
+ros2 run rqt_graph rqt_graph
 ```
 
 ---
@@ -344,13 +521,26 @@ The `ros2_ws/build/`, `ros2_ws/install/`, and `ros2_ws/log/` directories are gen
 Remove the `deploy.resources` GPU block from your compose file. This setup uses Mesa software rendering and does not need an Nvidia GPU.
 
 **`Authorization required` / `could not connect to display`**  
-Redo the X11 display setup for your platform. Make sure `$DISPLAY` is set and `/tmp/.docker.xauth` exists.
+Redo the X11 display setup for your platform. Make sure `$DISPLAY` is set and the `xauth list` verification step shows at least one entry.
 
 **`/tmp/.docker.xauth: no such file or directory`**  
 Run `touch /tmp/.docker.xauth` before the `xauth nmerge` command.
+
+**`xauth nlist` produces no output / auth file is empty**  
+`$DISPLAY` was not set when you ran the xauth commands. Set it with `export DISPLAY=:0` and repeat the entire X11 setup block.
 
 **Gazebo opens but is very slow**  
 Expected on a VM without GPU acceleration. The renderer falls back to llvmpipe (software). Lower world complexity or reduce the render resolution in `worlds/outdoor_field.sdf`.
 
 **`colcon build` fails inside the container**  
 Confirm the workspace is mounted correctly: `ls /drone_sim/ros2_ws/src` should list your packages. If the directory is empty, check the volume mounts in `docker-compose.dev.yml`.
+
+**`param: not found` in PX4 startup logs**  
+The PX4 environment was not sourced before launch. Make sure your `docker-compose.dev.yml` command block sources `/opt/ros/jazzy/setup.bash` and `/px4/Tools/simulation/gz/setup_gz.bash` before calling the PX4 binary.
+
+**PX4 topics are not visible in `ros2 topic list`**  
+The `px4_ros_com` bridge may not be running. Inside `drone_sim_dev`, run `ros2 node list` and confirm you see a `micrortps_agent` or `micro_ros_agent` node. If not, start it manually:
+
+```bash
+MicroXRCEAgent udp4 -p 8888
+```

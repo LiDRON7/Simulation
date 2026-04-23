@@ -9,11 +9,16 @@ services:
       - DISPLAY=${DISPLAY}
       - QT_X11_NO_MITSHM=1
       - XAUTHORITY=/tmp/.docker.xauth
-      - GZ_SIM_RESOURCE_PATH=/drone_sim/models:/drone_sim/worlds
-      - LIBGL_ALWAYS_SOFTWARE=1
-      - MESA_GL_VERSION_OVERRIDE=3.3
-      - GALLIUM_DRIVER=llvmpipe
+      - GZ_SIM_RESOURCE_PATH=/drone_sim/models:/drone_sim/worlds:/px4/Tools/simulation/gz/models
+      - GPU_VENDOR=${GPU_VENDOR:-none}
       - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-void}
+      # Software rendering — MESA_LOADER_DRIVER_OVERRIDE=swrast forces swrast
+      # at the loader level so ogre2's GL3Plus plugin cannot request a hw device
+      - LIBGL_ALWAYS_SOFTWARE=1
+      - MESA_GL_VERSION_OVERRIDE=4.5
+      - MESA_GLSL_VERSION_OVERRIDE=450
+      - GALLIUM_DRIVER=llvmpipe
+      - MESA_LOADER_DRIVER_OVERRIDE=swrast   # <-- NEW: prevents EGL hw-device segfault
     runtime: ${DOCKER_RUNTIME:-runc}
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
@@ -23,8 +28,8 @@ services:
       - ./config:/drone_sim/config
       - ./scripts:/drone_sim/scripts
       - ./ros2_ws:/drone_sim/ros2_ws
-    devices:
-      - /dev/dri:/dev/dri
+    # REMOVED: devices:/dev/dri — no usable GPU; passing it in causes Mesa to
+    # find a hardware DRI node and segfault when it can't open it for rendering.
 
   px4:
     build:
@@ -34,17 +39,22 @@ services:
     network_mode: host
     environment:
       - PX4_SIM_HOST_ADDR=127.0.0.1
-      - PX4_GZ_STANDALONE=1 # don't spawn Gazebo, connect to existing instance
+      - PX4_GZ_STANDALONE=1
+      - PX4_GZ_MODEL=x500_depth          # gz (Harmonic) model name
+      - GZ_SIM_RESOURCE_PATH=/drone_sim/models:/px4/Tools/simulation/gz/models
     volumes:
       - ./models:/drone_sim/models
-      - ./worlds:/drone_sim/worlds
     depends_on:
       - drone-dev
+    # Source the full PX4 environment before launching so that `param` and
+    # px4-rc.mavlinksim are on PATH.  Use the gz SITL runner, not a raw shell
+    # script, so the correct init sequence is used.
     command: >
       bash -c "
-        source /opt/ros/jazzy/setup.bash &&
-        source /px4/Tools/simulation/gz/setup_gz.bash &&
-        sleep 5 &&
-        cd /px4 && ./build/px4_sitl_default/bin/px4
-        -s ./ROMFS/px4fmu_common/init.d-posix/px4-rc.simulator
+        sleep 8
+        source /opt/ros/jazzy/setup.bash
+        source /px4/Tools/simulation/gz/setup_gz.bash
+        cd /px4
+        ./build/px4_sitl_default/bin/px4 ./build/px4_sitl_default/etc \
+          -s ./build/px4_sitl_default/etc/init.d-posix/px4-rc.simulator
       "

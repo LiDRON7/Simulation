@@ -227,7 +227,7 @@
       GZ_SIM_RESOURCE_PATH must contain your models/ directory.
     -->
     <include>
-      <uri>model://x500</uri>
+      <uri>model://x500_depth</uri>
       <name>drone</name>
       <pose>0 0 0.25 0 0 0</pose>   <!-- sitting on the landing pad -->
     </include>
