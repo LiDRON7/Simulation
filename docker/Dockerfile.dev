@@ -3,10 +3,6 @@ FROM ros:jazzy
 ENV DEBIAN_FRONTEND=noninteractive
 
 # ─── Core simulation stack ────────────────────────────────────────────────────
-# ros-jazzy-ros-gz  →  Gazebo Harmonic + ROS 2 bridge (official Jazzy pairing)
-# ros-jazzy-vision-opencv, cv-bridge  →  for OAK-D Pro image processing
-# ros-jazzy-sensor-msgs-py  →  PointCloud2 / Image / Imu message types
-# python3-colcon-common-extensions  →  build tool for your ROS 2 workspace
 RUN apt-get update && apt-get install -y \
     ros-jazzy-ros-gz \
     ros-jazzy-vision-opencv \
@@ -24,27 +20,68 @@ RUN apt-get update && apt-get install -y \
     htop \
     && rm -rf /var/lib/apt/lists/*
 
-# ─── Software rendering fallback (for non-GPU hosts e.g. Mac VMs) ────────────
-# libgl1-mesa-dri   →  provides the llvmpipe / softpipe drivers
-# libglx-mesa0      →  Mesa GLX so the X11 OpenGL path works without a GPU
+# ─── Software rendering fallback ─────────────────────────────────────────────
 RUN apt-get update && apt-get install -y \
     libgl1-mesa-dri \
     libglx-mesa0 \
     && rm -rf /var/lib/apt/lists/*
 
+# ─── PX4 build dependencies ──────────────────────────────────────────────────
+RUN apt-get update && apt-get install -y \
+    git \
+    cmake \
+    ninja-build \
+    python3-pip \
+    python3-setuptools \
+    python3-wheel \
+    python3-jinja2 \
+    python3-jsonschema \
+    python3-numpy \
+    python3-packaging \
+    python3-ply \
+    python3-pyserial \
+    python3-toml \
+    python3-yaml \
+    gcc \
+    g++ \
+    gdb \
+    clang \
+    make \
+    astyle \
+    libgstreamer1.0-dev \
+    libgstreamer-plugins-base1.0-dev \
+    libprotobuf-dev \
+    protobuf-compiler \
+    libeigen3-dev \
+    libopencv-dev \
+    bc \
+    && rm -rf /var/lib/apt/lists/*
+
+# ─── Clone and build PX4 ─────────────────────────────────────────────────────
+RUN git clone https://github.com/PX4/PX4-Autopilot.git /px4 \
+    --recursive --depth 1 --branch main
+
+WORKDIR /px4
+
+# Install PX4 python deps
+RUN pip3 install --break-system-packages -r /px4/Tools/setup/requirements.txt
+
+# Build PX4 SITL for x500 with depth camera
+RUN make px4_sitl \
+    && make px4_sitl gazebo-classic_x500_depth 2>/dev/null || true
+
 # ─── Shell environment ────────────────────────────────────────────────────────
 RUN echo "source /opt/ros/jazzy/setup.bash" >> ~/.bashrc \
-    # Tell Gazebo where to find your custom models and worlds
-    && echo 'export GZ_SIM_RESOURCE_PATH=/drone_sim/models:${GZ_SIM_RESOURCE_PATH}' >> ~/.bashrc \
-    && echo 'export GZ_SIM_RESOURCE_PATH=/drone_sim/worlds:${GZ_SIM_RESOURCE_PATH}' >> ~/.bashrc \
-    # Source your ROS 2 workspace if it has been built
+    && echo 'export GZ_SIM_RESOURCE_PATH=/drone_sim/models:/drone_sim/worlds:${GZ_SIM_RESOURCE_PATH}' >> ~/.bashrc \
+    && echo 'export GZ_CONFIG_PATH=/opt/ros/jazzy/opt/gz_sim_vendor/share/gz:/opt/ros/jazzy/opt/gz_transport_vendor/share/gz' >> ~/.bashrc \
+    && echo 'source /px4/Tools/simulation/gz/setup_gz.bash 2>/dev/null || true' >> ~/.bashrc \
     && echo '[ -f /drone_sim/ros2_ws/install/setup.bash ] && source /drone_sim/ros2_ws/install/setup.bash' >> ~/.bashrc \
-    && echo "alias sb='source ~/.bashrc'" >> ~/.bashrc
+    && echo "alias sb='source ~/.bashrc'" >> ~/.bashrc \
+    && echo "alias gz='/opt/ros/jazzy/opt/gz_tools_vendor/bin/gz'" >> ~/.bashrc
 
 # ─── Entrypoint ───────────────────────────────────────────────────────────────
 COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
 
-# Default: launch the outdoor field world
-CMD ["gz", "sim", "/drone_sim/worlds/outdoor_field.sdf"]
+CMD ["/opt/ros/jazzy/opt/gz_tools_vendor/bin/gz", "sim", "/drone_sim/worlds/outdoor_field.sdf"]
