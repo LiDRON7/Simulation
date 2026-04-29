@@ -18,6 +18,7 @@ RUN apt-get update && apt-get install -y \
     mesa-utils \
     vim \
     htop \
+    screen \
     && rm -rf /var/lib/apt/lists/*
 
 # ─── Software rendering fallback ─────────────────────────────────────────────
@@ -26,25 +27,39 @@ RUN apt-get update && apt-get install -y \
     libglx-mesa0 \
     && rm -rf /var/lib/apt/lists/*
 
-# ─── PX4 build dependencies ──────────────────────────────────────────────────
+# ─── Base build tools (curl needed for PX4's ubuntu.sh) ──────────────────────
 RUN apt-get update && apt-get install -y \
-    git \
-    cmake \
-    ninja-build \
-    python3-pip \
-    python3-setuptools \
-    python3-wheel \
-    python3-jinja2 \
-    python3-jsonschema \
-    python3-numpy \
-    python3-packaging \
-    python3-ply \
-    python3-serial \
-    python3-toml \
-    python3-yaml \
-    gcc \
-    g++ \
-    gdb \
-    clang \
-    make \
-    astyle \
+    git cmake ninja-build curl \
+    gcc g++ gdb clang make \
+    && rm -rf /var/lib/apt/lists/*
+
+# ─── Clone PX4 ───────────────────────────────────────────────────────────────
+RUN git clone --depth 1 --branch v1.15.0 --recursive \
+    https://github.com/PX4/PX4-Autopilot.git /px4
+
+# ─── Run PX4's own setup script — installs all deps including gz headers ─────
+# --no-sim-tools skips installing a second copy of Gazebo (we already have it
+# via ros-jazzy-ros-gz). We just need the compiler deps and Python packages.
+RUN cd /px4 && bash ./Tools/setup/ubuntu.sh --no-sim-tools
+
+# ─── Build PX4 SITL with Gazebo Harmonic ─────────────────────────────────────
+# CRITICAL: Source the ROS environment first so CMake can find the gz vendor
+# libraries under /opt/ros/jazzy/opt/. Without this, gz_bridge won't compile.
+# DONT_RUN=1 stops PX4 from trying to launch gz during the Docker build.
+RUN /bin/bash -c "\
+    source /opt/ros/jazzy/setup.bash && \
+    cd /px4 && \
+    DONT_RUN=1 make px4_sitl_default gz_x500_depth \
+"
+
+# Strip only the main px4 binary — do NOT delete anything else.
+# gz_bridge and other Gazebo artifacts live alongside it and must survive.
+RUN strip /px4/build/px4_sitl_default/bin/px4
+
+ENV GZ_SIM_RESOURCE_PATH=/drone_sim/models:/drone_sim/worlds:/px4/Tools/simulation/gz/models
+
+COPY docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
+
+WORKDIR /drone_sim
