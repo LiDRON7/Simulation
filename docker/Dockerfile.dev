@@ -44,7 +44,7 @@ RUN git clone --depth 1 --branch v1.15.0 --recursive \
 RUN pip3 install --break-system-packages \
     -r /px4/Tools/setup/requirements.txt
 
-# ─── Build PX4 SITL + strip build artifacts to save space ────────────────────
+# ─── Build PX4 SITL + strip artifacts to save space ──────────────────────────
 RUN cd /px4 \
     && DONT_RUN=1 make px4_sitl_default \
     && find /px4/build/px4_sitl_default -mindepth 1 -maxdepth 1 \

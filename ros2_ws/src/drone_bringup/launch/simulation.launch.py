@@ -64,7 +64,7 @@ def generate_launch_description():
                 parameters=[
                     {
                         "robot_description": open(
-                            "/drone_sim/models/hexacopter/model.sdf"
+                            "/drone_sim/models/hexacopter_sensors/model.sdf"
                         ).read()
                     }
                 ],

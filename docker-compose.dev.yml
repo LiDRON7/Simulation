@@ -39,6 +39,9 @@ services:
       - PX4_SIM_HOST_ADDR=127.0.0.1
       - PX4_GZ_STANDALONE=1
       - PX4_GZ_MODEL=x500_depth
+      - PX4_SIMULATOR=gz
+      - PX4_SIM_MODEL=x500_depth
+      - PX4_SYS_AUTOSTART=4001
       - GZ_SIM_RESOURCE_PATH=/drone_sim/models:/px4/Tools/simulation/gz/models
     volumes:
       - ./models:/drone_sim/models
@@ -48,7 +51,11 @@ services:
       bash -c "
         sleep 15 &&
         cd /px4 &&
+        PX4_SYS_AUTOSTART=4001 \
+        PX4_SIMULATOR=gz \
+        PX4_GZ_STANDALONE=1 \
+        PX4_GZ_MODEL=x500_depth \
         ./build/px4_sitl_default/bin/px4 \
           ./build/px4_sitl_default/etc \
-          -s ./build/px4_sitl_default/etc/init.d-posix/px4-rc.simulator
+          -s ./build/px4_sitl_default/etc/init.d-posix/rcS
       "
