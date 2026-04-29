@@ -56,6 +56,6 @@ services:
         PX4_GZ_STANDALONE=1 \
         PX4_GZ_MODEL=x500_depth \
         ./build/px4_sitl_default/bin/px4 \
-          ./build/px4_sitl_default/etc \
+          -d ./build/px4_sitl_default \
           -s ./build/px4_sitl_default/etc/init.d-posix/rcS
       "

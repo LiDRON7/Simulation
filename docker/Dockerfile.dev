@@ -34,6 +34,9 @@ RUN apt-get update && apt-get install -y \
     python3-jsonschema python3-numpy python3-packaging \
     python3-ply python3-serial python3-toml python3-yaml \
     gcc g++ gdb clang make astyle \
+    # gz_bridge needs these at build time
+    libgz-transport13-dev \
+    libgz-msgs10-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # ─── Clone PX4 ───────────────────────────────────────────────────────────────
@@ -44,13 +47,16 @@ RUN git clone --depth 1 --branch v1.15.0 --recursive \
 RUN pip3 install --break-system-packages \
     -r /px4/Tools/setup/requirements.txt
 
-# ─── Build PX4 SITL + strip artifacts to save space ──────────────────────────
-RUN cd /px4 \
-    && DONT_RUN=1 make px4_sitl_default \
-    && find /px4/build/px4_sitl_default -mindepth 1 -maxdepth 1 \
-         ! -name 'bin' ! -name 'etc' \
-         -exec rm -rf {} + \
-    && strip /px4/build/px4_sitl_default/bin/px4
+# ─── Build PX4 SITL with Gazebo Harmonic (builds gz_bridge) ──────────────────
+# DONT_RUN=1 prevents PX4 from trying to launch gz during the build.
+# The target gz_x500_depth compiles the Gazebo bridge AND registers the
+# x500_depth model, which is what we need.
+RUN cd /px4 && \
+    . /opt/ros/jazzy/setup.sh && \
+    DONT_RUN=1 make px4_sitl_default gz_x500_depth
+
+# Strip only the main px4 binary; leave everything else (gz_bridge, etc.)
+RUN strip /px4/build/px4_sitl_default/bin/px4
 
 ENV GZ_SIM_RESOURCE_PATH=/drone_sim/models:/drone_sim/worlds:/px4/Tools/simulation/gz/models
 
