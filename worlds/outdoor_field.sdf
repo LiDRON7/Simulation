@@ -222,15 +222,12 @@
 
     <!-- ═════════════════ HEXACOPTER SPAWN ════════════════════════════ -->
     <!--
-      The drone is included directly in the world so it spawns at startup.
-      Adjust <pose> to move the takeoff position.
-      GZ_SIM_RESOURCE_PATH must contain your models/ directory.
+      DO NOT spawn the drone here in standalone mode.
+      PX4 SITL spawns the x500_depth model itself when it connects to Gazebo.
+      Spawning it here too causes a model conflict and Gazebo will exit.
+      The spawn pose is controlled via PX4_GZ_MODEL_POSE env var instead.
     -->
-    <include>
-      <uri>model://x500_depth</uri>
-      <name>drone</name>
-      <pose>0 0 0.25 0 0 0</pose>   <!-- sitting on the landing pad -->
-    </include>
 
   </world>
 </sdf>
+
