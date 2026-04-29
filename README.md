@@ -28,12 +28,12 @@ This repository packages a full drone simulation stack inside Docker. Gazebo han
 
 ## Requirements
 
-| Tool | Version |
-|------|---------|
-| Docker Engine | 24+ |
-| Docker Compose plugin | v2+ |
-| Git | any |
-| UTM *(macOS only)* | 4+ |
+| Tool                  | Version |
+| --------------------- | ------- |
+| Docker Engine         | 24+     |
+| Docker Compose plugin | v2+     |
+| Git                   | any     |
+| UTM _(macOS only)_    | 4+      |
 
 ---
 
@@ -363,40 +363,49 @@ The ROS 2 environment is sourced automatically by the entrypoint, so `ros2` comm
 
 ### PX4 Commands
 
-PX4 exposes a MAVLink shell over UDP. The recommended way to send commands interactively is via the `mavlink_shell.py` script included with PX4.
+PX4 module commands (`commander`, `param`, `listener`, etc.) are **internal PX4 modules**, not Linux binaries. They only exist inside the PX4 console — typing them directly in the container's bash shell will always give `command not found`.
 
-**Open the MAVLink shell:**
+PX4 runs inside a `screen` session named `px4` inside the `drone_px4` container. This gives it a real TTY and lets you attach and detach cleanly without killing the process.
 
-```bash
-docker exec -it drone_px4 bash
-cd /px4
-python3 Tools/mavlink_shell.py
-```
-
-Once connected you will see the `nsh>` prompt. Useful commands:
-
-| Command | Description |
-|---------|-------------|
-| `commander status` | Show arming state, flight mode, and health flags |
-| `commander arm` | Arm the drone (requires no failsafes active) |
-| `commander disarm` | Disarm the drone |
-| `commander takeoff` | Take off to the default altitude |
-| `commander land` | Land at the current position |
-| `commander mode posctl` | Switch to Position Control mode |
-| `commander mode offboard` | Switch to Offboard mode (needed for ROS 2 control) |
-| `param show <name>` | Print the value of a parameter |
-| `param set <name> <value>` | Set a parameter (e.g. `param set MPC_XY_VEL_MAX 5.0`) |
-| `listener vehicle_local_position` | Stream position estimates to the terminal |
-| `listener vehicle_status` | Stream vehicle status |
-| `top` | Show PX4 task CPU and memory usage |
-
-Exit the shell with `Ctrl+C` or type `exit`.
-
-**Arm and take off in one sequence (quick test):**
+#### Attach to the PX4 console
 
 ```bash
-commander arm && commander takeoff
+docker exec -it drone_px4 screen -r px4
 ```
+
+You will land at the `pxh>` prompt. Everything typed here runs inside PX4.
+
+**To detach without stopping PX4:** press `Ctrl+A` then `D`. This leaves PX4 running and returns you to your host terminal.
+
+**Do not press `Ctrl+C`** — this sends SIGINT to PX4 and will shut it down.
+
+#### Useful pxh> commands
+
+| Command                           | Description                                           |
+| --------------------------------- | ----------------------------------------------------- |
+| `commander status`                | Show arming state, flight mode, and health flags      |
+| `commander arm`                   | Arm the drone (requires no failsafes active)          |
+| `commander disarm`                | Disarm the drone                                      |
+| `commander takeoff`               | Take off to the default altitude                      |
+| `commander land`                  | Land at the current position                          |
+| `commander mode posctl`           | Switch to Position Control mode                       |
+| `commander mode offboard`         | Switch to Offboard mode (needed for ROS 2 control)    |
+| `param show <name>`               | Print the value of a parameter                        |
+| `param set <name> <value>`        | Set a parameter (e.g. `param set MPC_XY_VEL_MAX 5.0`) |
+| `listener vehicle_local_position` | Stream position estimates to the terminal             |
+| `listener vehicle_status`         | Stream vehicle status                                 |
+| `top`                             | Show PX4 task CPU and memory usage                    |
+
+#### Arm and take off (quick test)
+
+At the `pxh>` prompt:
+
+```
+commander arm
+commander takeoff
+```
+
+Run these as two separate commands. The `&&` chaining syntax does not work inside `pxh>`.
 
 ---
 
@@ -412,17 +421,17 @@ ros2 topic list
 
 **Common topics published by PX4 via `px4_ros_com`:**
 
-| Topic | Message Type | Description |
-|-------|-------------|-------------|
-| `/fmu/out/vehicle_local_position` | `px4_msgs/VehicleLocalPosition` | NED position and velocity estimate |
-| `/fmu/out/vehicle_global_position` | `px4_msgs/VehicleGlobalPosition` | GPS latitude, longitude, altitude |
-| `/fmu/out/vehicle_attitude` | `px4_msgs/VehicleAttitude` | Orientation quaternion |
-| `/fmu/out/vehicle_status` | `px4_msgs/VehicleStatus` | Arming state, nav state, flight mode |
-| `/fmu/out/sensor_combined` | `px4_msgs/SensorCombined` | Raw IMU (gyro + accelerometer) |
-| `/fmu/out/battery_status` | `px4_msgs/BatteryStatus` | Battery voltage and percentage |
-| `/fmu/in/trajectory_setpoint` | `px4_msgs/TrajectorySetpoint` | Send position/velocity setpoints |
-| `/fmu/in/vehicle_command` | `px4_msgs/VehicleCommand` | Send MAVLink commands (arm, mode changes) |
-| `/fmu/in/offboard_control_mode` | `px4_msgs/OffboardControlMode` | Enable offboard control heartbeat |
+| Topic                              | Message Type                     | Description                               |
+| ---------------------------------- | -------------------------------- | ----------------------------------------- |
+| `/fmu/out/vehicle_local_position`  | `px4_msgs/VehicleLocalPosition`  | NED position and velocity estimate        |
+| `/fmu/out/vehicle_global_position` | `px4_msgs/VehicleGlobalPosition` | GPS latitude, longitude, altitude         |
+| `/fmu/out/vehicle_attitude`        | `px4_msgs/VehicleAttitude`       | Orientation quaternion                    |
+| `/fmu/out/vehicle_status`          | `px4_msgs/VehicleStatus`         | Arming state, nav state, flight mode      |
+| `/fmu/out/sensor_combined`         | `px4_msgs/SensorCombined`        | Raw IMU (gyro + accelerometer)            |
+| `/fmu/out/battery_status`          | `px4_msgs/BatteryStatus`         | Battery voltage and percentage            |
+| `/fmu/in/trajectory_setpoint`      | `px4_msgs/TrajectorySetpoint`    | Send position/velocity setpoints          |
+| `/fmu/in/vehicle_command`          | `px4_msgs/VehicleCommand`        | Send MAVLink commands (arm, mode changes) |
+| `/fmu/in/offboard_control_mode`    | `px4_msgs/OffboardControlMode`   | Enable offboard control heartbeat         |
 
 **Subscribe to a topic and print messages:**
 
@@ -445,13 +454,13 @@ ros2 interface show px4_msgs/msg/VehicleLocalPosition
 
 **Camera and sensor topics (if the OakD-Lite model is loaded):**
 
-| Topic | Description |
-|-------|-------------|
-| `/drone/camera/image_raw` | RGB image from the forward camera |
-| `/drone/camera/camera_info` | Camera intrinsics |
-| `/drone/stereo/left/image_raw` | Left stereo image |
-| `/drone/stereo/right/image_raw` | Right stereo image |
-| `/drone/depth/image_raw` | Depth image |
+| Topic                           | Description                       |
+| ------------------------------- | --------------------------------- |
+| `/drone/camera/image_raw`       | RGB image from the forward camera |
+| `/drone/camera/camera_info`     | Camera intrinsics                 |
+| `/drone/stereo/left/image_raw`  | Left stereo image                 |
+| `/drone/stereo/right/image_raw` | Right stereo image                |
+| `/drone/depth/image_raw`        | Depth image                       |
 
 **View the node graph** (run outside the container, requires `rqt` installed on the host):
 
@@ -535,8 +544,11 @@ Expected on a VM without GPU acceleration. The renderer falls back to llvmpipe (
 **`colcon build` fails inside the container**  
 Confirm the workspace is mounted correctly: `ls /drone_sim/ros2_ws/src` should list your packages. If the directory is empty, check the volume mounts in `docker-compose.dev.yml`.
 
-**`param: not found` in PX4 startup logs**  
-The PX4 environment was not sourced before launch. Make sure your `docker-compose.dev.yml` command block sources `/opt/ros/jazzy/setup.bash` and `/px4/Tools/simulation/gz/setup_gz.bash` before calling the PX4 binary.
+**`param: not found` or `commander: command not found` in bash**  
+`param`, `commander`, and other PX4 modules are internal to the PX4 runtime — they are not Linux binaries and cannot be called from a bash shell. Connect to the running PX4 process first: `python3 Tools/mavlink_shell.py udp:127.0.0.1:14556` from inside the `drone_px4` container, then run these commands at the `nsh>` prompt.
+
+**`mavlink_shell.py`: `Error: no serial connection found`**  
+You ran `mavlink_shell.py` without arguments, which looks for a serial port. In SITL there is no serial port. Always pass the UDP address explicitly: `python3 Tools/mavlink_shell.py udp:127.0.0.1:14556`.
 
 **PX4 topics are not visible in `ros2 topic list`**  
 The `px4_ros_com` bridge may not be running. Inside `drone_sim_dev`, run `ros2 node list` and confirm you see a `micrortps_agent` or `micro_ros_agent` node. If not, start it manually:

@@ -18,7 +18,7 @@ services:
       - MESA_GL_VERSION_OVERRIDE=4.5
       - MESA_GLSL_VERSION_OVERRIDE=450
       - GALLIUM_DRIVER=llvmpipe
-      - MESA_LOADER_DRIVER_OVERRIDE=swrast   # <-- NEW: prevents EGL hw-device segfault
+      - MESA_LOADER_DRIVER_OVERRIDE=swrast # <-- NEW: prevents EGL hw-device segfault
     runtime: ${DOCKER_RUNTIME:-runc}
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
@@ -40,7 +40,7 @@ services:
     environment:
       - PX4_SIM_HOST_ADDR=127.0.0.1
       - PX4_GZ_STANDALONE=1
-      - PX4_GZ_MODEL=x500_depth          # gz (Harmonic) model name
+      - PX4_GZ_MODEL=x500_depth # gz (Harmonic) model name
       - GZ_SIM_RESOURCE_PATH=/drone_sim/models:/px4/Tools/simulation/gz/models
     volumes:
       - ./models:/drone_sim/models
@@ -55,6 +55,6 @@ services:
         source /opt/ros/jazzy/setup.bash
         source /px4/Tools/simulation/gz/setup_gz.bash
         cd /px4
-        ./build/px4_sitl_default/bin/px4 ./build/px4_sitl_default/etc \
+        exec screen -DmS px4 ./build/px4_sitl_default/bin/px4 ./build/px4_sitl_default/etc \
           -s ./build/px4_sitl_default/etc/init.d-posix/px4-rc.simulator
       "

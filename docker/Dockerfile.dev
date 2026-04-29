@@ -18,6 +18,7 @@ RUN apt-get update && apt-get install -y \
     mesa-utils \
     vim \
     htop \
+    screen \
     && rm -rf /var/lib/apt/lists/*
 
 # ─── Software rendering fallback ─────────────────────────────────────────────
@@ -48,3 +49,41 @@ RUN apt-get update && apt-get install -y \
     clang \
     make \
     astyle \
+    libgstreamer1.0-dev \
+    libgstreamer-plugins-base1.0-dev \
+    libprotobuf-dev \
+    protobuf-compiler \
+    libeigen3-dev \
+    libopencv-dev \
+    bc \
+    && rm -rf /var/lib/apt/lists/*
+
+# ─── Clone and build PX4 ─────────────────────────────────────────────────────
+RUN git clone https://github.com/PX4/PX4-Autopilot.git /px4 \
+    --recursive --depth 1 --branch main
+
+WORKDIR /px4
+
+# Install PX4 python deps
+RUN pip3 install --break-system-packages -r /px4/Tools/setup/requirements.txt
+
+# Build PX4 SITL for gz (Harmonic) — NOT gazebo-classic.
+# "make px4_sitl" alone builds the binary + gz init scripts including
+# px4-rc.mavlinksim.  The second target builds the x500_depth model assets.
+RUN make px4_sitl \
+    && make px4_sitl gz_x500_depth 2>/dev/null || true
+
+# ─── Shell environment ────────────────────────────────────────────────────────
+RUN echo "source /opt/ros/jazzy/setup.bash" >> ~/.bashrc \
+    && echo 'export GZ_SIM_RESOURCE_PATH=/drone_sim/models:/drone_sim/worlds:${GZ_SIM_RESOURCE_PATH}' >> ~/.bashrc \
+    && echo 'export GZ_CONFIG_PATH=/opt/ros/jazzy/opt/gz_sim_vendor/share/gz:/opt/ros/jazzy/opt/gz_transport_vendor/share/gz' >> ~/.bashrc \
+    && echo 'source /px4/Tools/simulation/gz/setup_gz.bash 2>/dev/null || true' >> ~/.bashrc \
+    && echo '[ -f /drone_sim/ros2_ws/install/setup.bash ] && source /drone_sim/ros2_ws/install/setup.bash' >> ~/.bashrc \
+    && echo "alias sb='source ~/.bashrc'" >> ~/.bashrc \
+    && echo "alias gz='/opt/ros/jazzy/opt/gz_tools_vendor/bin/gz'" >> ~/.bashrc
+
+# ─── Entrypoint ───────────────────────────────────────────────────────────────
+COPY docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["/opt/ros/jazzy/opt/gz_tools_vendor/bin/gz", "sim", "/drone_sim/worlds/outdoor_field.sdf"]
