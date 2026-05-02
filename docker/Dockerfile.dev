@@ -27,29 +27,45 @@ RUN apt-get update && apt-get install -y \
     libglx-mesa0 \
     && rm -rf /var/lib/apt/lists/*
 
-# ─── Base build tools (curl needed for PX4's ubuntu.sh) ──────────────────────
+# ─── PX4 build tools ─────────────────────────────────────────────────────────
 RUN apt-get update && apt-get install -y \
-    git cmake ninja-build curl \
-    gcc g++ gdb clang make \
+    astyle build-essential ccache cmake cppcheck \
+    file g++ gcc gdb git lcov curl wget lsb-release gnupg \
+    libssl-dev libxml2-dev libxml2-utils \
+    make ninja-build \
+    python3 python3-dev python3-pip python3-setuptools python3-wheel \
+    rsync shellcheck unzip zip \
+    bc libunwind-dev cppzmq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# ─── Install Gazebo Harmonic system libraries from osrfoundation ─────────────
+# PX4's CMakeLists uses plain find_package(gz-transport13) etc. — it does NOT
+# understand the ROS vendor shim pattern. So we need real system-level gz dev
+# headers that pkg-config can find directly (under /usr, not /opt/ros/jazzy/).
+# These coexist fine with the ROS vendor packages; they just add system copies.
+RUN wget https://packages.osrfoundation.org/gazebo.gpg \
+        -O /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] \
+        http://packages.osrfoundation.org/gazebo/ubuntu-stable $(lsb_release -cs) main" \
+        > /etc/apt/sources.list.d/gazebo-stable.list && \
+    apt-get update && apt-get install -y \
+        gz-harmonic \
     && rm -rf /var/lib/apt/lists/*
 
 # ─── Clone PX4 ───────────────────────────────────────────────────────────────
 RUN git clone --depth 1 --branch v1.15.0 --recursive \
     https://github.com/PX4/PX4-Autopilot.git /px4
 
-# ─── Run PX4's own setup script — installs all deps including gz headers ─────
-# --no-sim-tools skips installing a second copy of Gazebo (we already have it
-# via ros-jazzy-ros-gz). We just need the compiler deps and Python packages.
-RUN cd /px4 && bash ./Tools/setup/ubuntu.sh --no-sim-tools
+# ─── PX4 Python deps ─────────────────────────────────────────────────────────
+RUN pip3 install --break-system-packages -r /px4/Tools/setup/requirements.txt
 
-# ─── Build PX4 SITL with Gazebo Harmonic ─────────────────────────────────────
-# CRITICAL: Source the ROS environment first so CMake can find the gz vendor
-# libraries under /opt/ros/jazzy/opt/. Without this, gz_bridge won't compile.
-# DONT_RUN=1 stops PX4 from trying to launch gz during the Docker build.
-RUN /bin/bash -c "\
-    source /opt/ros/jazzy/setup.bash && \
+# ─── Build PX4 SITL — pure compile step, nothing launches ────────────────────
+# gz-harmonic is now on the system pkg-config path so CMake finds it directly.
+# We only call make px4_sitl_default (no model suffix) — this compiles
+# gz_bridge without trying to launch a simulator.
+RUN /bin/bash -c " \
     cd /px4 && \
-    DONT_RUN=1 make px4_sitl_default gz_x500_depth \
+    make px4_sitl_default \
 "
 
 # Strip only the main px4 binary — do NOT delete anything else.

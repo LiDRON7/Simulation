@@ -16,6 +16,7 @@ services:
       - MESA_GLSL_VERSION_OVERRIDE=450
       - GALLIUM_DRIVER=llvmpipe
       - MESA_LOADER_DRIVER_OVERRIDE=swrast
+      - GZ_IP=127.0.0.1
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
@@ -36,12 +37,13 @@ services:
     container_name: drone_px4
     network_mode: host
     environment:
+      - GZ_IP=127.0.0.1
+      - PX4_GZ_WORLD=outdoor_field
       - PX4_SIM_HOST_ADDR=127.0.0.1
       - PX4_GZ_STANDALONE=1
-      - PX4_GZ_MODEL=x500_depth
+      - PX4_SIM_MODEL=x500_depth
       - PX4_GZ_MODEL_POSE=0,0,0.25,0,0,0
       - PX4_SIMULATOR=gz
-      - PX4_SIM_MODEL=x500_depth
       - PX4_SYS_AUTOSTART=4001
       - GZ_SIM_RESOURCE_PATH=/drone_sim/models:/px4/Tools/simulation/gz/models
     volumes:
@@ -50,13 +52,37 @@ services:
       - drone-dev
     command: >
       bash -c "
-        sleep 15 &&
-        cd /px4 &&
+        sleep 20 &&
+        source /opt/ros/jazzy/setup.bash &&
+        cd /px4/build/px4_sitl_default &&
+        GZ_IP=127.0.0.1 \
+        PX4_GZ_WORLD=outdoor_field \
         PX4_SYS_AUTOSTART=4001 \
         PX4_SIMULATOR=gz \
         PX4_GZ_STANDALONE=1 \
-        PX4_GZ_MODEL=x500_depth \
-        ./build/px4_sitl_default/bin/px4 \
-          -d ./build/px4_sitl_default \
-          -s ./build/px4_sitl_default/etc/init.d-posix/rcS
+        PX4_SIM_MODEL=x500_depth \
+        PX4_GZ_MODEL_POSE=0,0,0.25,0,0,0 \
+        ./bin/px4 -s etc/init.d-posix/rcS
+      "
+
+  ros:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dev
+    container_name: drone_ros
+    network_mode: host
+    environment:
+      - GZ_IP=127.0.0.1
+      - GZ_SIM_RESOURCE_PATH=/drone_sim/models:/drone_sim/worlds:/px4/Tools/simulation/gz/models
+    volumes:
+      - ./models:/drone_sim/models
+      - ./worlds:/drone_sim/worlds
+      - ./config:/drone_sim/config
+      - ./scripts:/drone_sim/scripts
+      - ./ros2_ws:/drone_sim/ros2_ws
+    command: >
+      bash -c "
+        sleep 30 &&
+        source /opt/ros/jazzy/setup.bash &&
+        python3 /drone_sim/config/simulation_launch.py
       "

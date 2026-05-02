@@ -28,6 +28,14 @@
             name="gz::sim::systems::Sensors">
       <render_engine>ogre2</render_engine>
     </plugin>
+    <plugin filename="gz-sim-imu-system"
+            name="gz::sim::systems::Imu"/>
+    <plugin filename="gz-sim-air-pressure-system"
+            name="gz::sim::systems::AirPressure"/>
+    <plugin filename="gz-sim-navsat-system"
+            name="gz::sim::systems::NavSat"/>
+    <plugin filename="gz-sim-magnetometer-system"
+            name="gz::sim::systems::Magnetometer"/>
     <plugin filename="gz-sim-user-commands-system"
             name="gz::sim::systems::UserCommands"/>
     <plugin filename="gz-sim-scene-broadcaster-system"
@@ -220,13 +228,6 @@
       <joint name="canopy_joint" type="fixed"><parent>trunk</parent><child>canopy</child></joint>
     </model>
 
-    <!-- ═════════════════ HEXACOPTER SPAWN ════════════════════════════ -->
-    <!--
-      DO NOT spawn the drone here in standalone mode.
-      PX4 SITL spawns the x500_depth model itself when it connects to Gazebo.
-      Spawning it here too causes a model conflict and Gazebo will exit.
-      The spawn pose is controlled via PX4_GZ_MODEL_POSE env var instead.
-    -->
-
   </world>
 </sdf>
+
