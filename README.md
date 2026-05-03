@@ -8,6 +8,7 @@ ROS 2 Jazzy · Gazebo Harmonic · PX4 · Docker
 
 - [Overview](#overview)
 - [Requirements](#requirements)
+- [GPU Configuration](#gpu-configuration)
 - [Setup: Linux (Ubuntu 24.04)](#setup-linux-ubuntu-2404)
 - [Setup: macOS (via UTM Virtual Machine)](#setup-macos-via-utm-virtual-machine)
 - [Setup: Windows (via WSL 2)](#setup-windows-via-wsl-2)
@@ -84,7 +85,7 @@ cd Simulation
 cp .env.example .env
 ```
 
-Edit `.env` if you need to adjust any ports or paths.
+Edit `.env` to set your GPU type — see [GPU Configuration](#gpu-configuration) above.
 
 ### Configure X11 Display Access
 
@@ -184,7 +185,7 @@ cd Simulation
 cp .env.example .env
 ```
 
-### 6. Configure X11 Display Access
+Edit `.env` to set your GPU type — see [GPU Configuration](#gpu-configuration) above. For an Apple Silicon VM, the default (everything commented out) is correct.
 
 **Step 1 — Confirm your display variable is set:**
 
@@ -277,7 +278,7 @@ cd Simulation
 cp .env.example .env
 ```
 
-### 5. Configure X11 Display Access
+Edit `.env` to set your GPU type — see [GPU Configuration](#gpu-configuration) above.
 
 **Step 1 — Confirm your display variable is set:**
 
@@ -521,6 +522,132 @@ class GpsSubscriber(Node):
 
 rclpy.init()
 rclpy.spin(GpsSubscriber())
+```
+
+---
+
+## Using the Container
+
+### Open a Shell
+
+Open an interactive shell inside the simulation container:
+
+```bash
+docker exec -it drone_sim_dev bash
+```
+
+Or inside the PX4 container:
+
+```bash
+docker exec -it drone_px4 bash
+```
+
+The ROS 2 environment is sourced automatically by the entrypoint, so `ros2` commands work immediately in any shell you open this way.
+
+---
+
+### PX4 Commands
+
+PX4 exposes a MAVLink shell over UDP. The recommended way to send commands interactively is via the `mavlink_shell.py` script included with PX4.
+
+**Open the MAVLink shell:**
+
+```bash
+docker exec -it drone_px4 bash
+cd /px4
+python3 Tools/mavlink_shell.py
+```
+
+Once connected you will see the `nsh>` prompt. Useful commands:
+
+| Command                           | Description                                           |
+| --------------------------------- | ----------------------------------------------------- |
+| `commander status`                | Show arming state, flight mode, and health flags      |
+| `commander arm`                   | Arm the drone (requires no failsafes active)          |
+| `commander disarm`                | Disarm the drone                                      |
+| `commander takeoff`               | Take off to the default altitude                      |
+| `commander land`                  | Land at the current position                          |
+| `commander mode posctl`           | Switch to Position Control mode                       |
+| `commander mode offboard`         | Switch to Offboard mode (needed for ROS 2 control)    |
+| `param show <name>`               | Print the value of a parameter                        |
+| `param set <name> <value>`        | Set a parameter (e.g. `param set MPC_XY_VEL_MAX 5.0`) |
+| `listener vehicle_local_position` | Stream position estimates to the terminal             |
+| `listener vehicle_status`         | Stream vehicle status                                 |
+| `top`                             | Show PX4 task CPU and memory usage                    |
+
+Exit the shell with `Ctrl+C` or type `exit`.
+
+**Arm and take off in one sequence (quick test):**
+
+```bash
+commander arm && commander takeoff
+```
+
+---
+
+### ROS 2 Topics
+
+All ROS 2 commands below run inside the `drone_sim_dev` container.
+
+**List all active topics:**
+
+```bash
+ros2 topic list
+```
+
+**Common topics published by PX4 via `px4_ros_com`:**
+
+| Topic                              | Message Type                     | Description                               |
+| ---------------------------------- | -------------------------------- | ----------------------------------------- |
+| `/fmu/out/vehicle_local_position`  | `px4_msgs/VehicleLocalPosition`  | NED position and velocity estimate        |
+| `/fmu/out/vehicle_global_position` | `px4_msgs/VehicleGlobalPosition` | GPS latitude, longitude, altitude         |
+| `/fmu/out/vehicle_attitude`        | `px4_msgs/VehicleAttitude`       | Orientation quaternion                    |
+| `/fmu/out/vehicle_status`          | `px4_msgs/VehicleStatus`         | Arming state, nav state, flight mode      |
+| `/fmu/out/sensor_combined`         | `px4_msgs/SensorCombined`        | Raw IMU (gyro + accelerometer)            |
+| `/fmu/out/battery_status`          | `px4_msgs/BatteryStatus`         | Battery voltage and percentage            |
+| `/fmu/in/trajectory_setpoint`      | `px4_msgs/TrajectorySetpoint`    | Send position/velocity setpoints          |
+| `/fmu/in/vehicle_command`          | `px4_msgs/VehicleCommand`        | Send MAVLink commands (arm, mode changes) |
+| `/fmu/in/offboard_control_mode`    | `px4_msgs/OffboardControlMode`   | Enable offboard control heartbeat         |
+
+**Subscribe to a topic and print messages:**
+
+```bash
+ros2 topic echo /fmu/out/vehicle_local_position
+```
+
+**Check the publish rate of a topic:**
+
+```bash
+ros2 topic hz /fmu/out/vehicle_local_position
+```
+
+**Inspect the message type and field definitions:**
+
+```bash
+ros2 topic info /fmu/out/vehicle_local_position
+ros2 interface show px4_msgs/msg/VehicleLocalPosition
+```
+
+**Camera and sensor topics (if the OakD-Lite model is loaded):**
+
+| Topic                           | Description                       |
+| ------------------------------- | --------------------------------- |
+| `/drone/camera/image_raw`       | RGB image from the forward camera |
+| `/drone/camera/camera_info`     | Camera intrinsics                 |
+| `/drone/stereo/left/image_raw`  | Left stereo image                 |
+| `/drone/stereo/right/image_raw` | Right stereo image                |
+| `/drone/depth/image_raw`        | Depth image                       |
+
+**View the node graph** (run outside the container, requires `rqt` installed on the host):
+
+```bash
+rqt_graph
+```
+
+Or inside the container:
+
+```bash
+ros2 run rqt_graph rqt_graph
 ```
 
 ---
