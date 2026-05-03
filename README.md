@@ -25,51 +25,24 @@ ROS 2 Jazzy · Gazebo Harmonic · PX4 · Docker
 
 This repository packages a full drone simulation stack inside Docker. Gazebo handles the physics and rendering, PX4 runs as the flight controller, and your ROS 2 packages communicate with both over standard interfaces. The container runs the same way on a native Linux machine or a Linux VM on macOS.
 
+The stack runs three containers:
+
+| Container | Role |
+|---|---|
+| `drone_sim_dev` | Gazebo Harmonic simulation server + GUI |
+| `drone_px4` | PX4 SITL flight controller |
+| `drone_ros` | ROS 2 gz bridge + optional MAVROS |
+
 ---
 
 ## Requirements
 
-| Tool                  | Version |
-| --------------------- | ------- |
-| Docker Engine         | 24+     |
-| Docker Compose plugin | v2+     |
-| Git                   | any     |
-| UTM _(macOS only)_    | 4+      |
-
----
-
-## GPU Configuration
-
-> **Do this before running any setup steps.** The `.env` file controls which GPU driver the container uses. Choosing the wrong setting (or skipping this step) is the most common cause of Gazebo rendering failures.
-
-After cloning the repository, copy the example env file:
-
-```bash
-cp .env.example .env
-```
-
-Then open `.env` and uncomment the block that matches your hardware:
-
-```bash
-# Copy this file to .env and uncomment your GPU type
-# cp .env.example .env
-
-# ── No GPU / Apple Silicon VM (default, no changes needed) ────────────────
-# Nothing to set, software rendering is the default
-
-# ── NVIDIA GPU ────────────────────────────────────────────────────────────
-# DOCKER_RUNTIME=nvidia
-# NVIDIA_VISIBLE_DEVICES=all
-# GPU_VENDOR=nvidia
-
-# ── AMD GPU ───────────────────────────────────────────────────────────────
-# GPU_VENDOR=amd
-
-# ── Intel GPU ─────────────────────────────────────────────────────────────
-# GPU_VENDOR=intel
-```
-
-If you are unsure, leave everything commented out. The default is software rendering (Mesa/llvmpipe), which works everywhere but runs slower — see [Troubleshooting](#troubleshooting) if Gazebo is too slow.
+| Tool | Version |
+|---|---|
+| Docker Engine | 24+ |
+| Docker Compose plugin | v2+ |
+| Git | any |
+| UTM _(macOS only)_ | 4+ |
 
 ---
 
@@ -214,8 +187,6 @@ cp .env.example .env
 
 Edit `.env` to set your GPU type — see [GPU Configuration](#gpu-configuration) above. For an Apple Silicon VM, the default (everything commented out) is correct.
 
-### 6. Configure X11 Display Access
-
 **Step 1 — Confirm your display variable is set:**
 
 ```bash
@@ -309,8 +280,6 @@ cp .env.example .env
 
 Edit `.env` to set your GPU type — see [GPU Configuration](#gpu-configuration) above.
 
-### 5. Configure X11 Display Access
-
 **Step 1 — Confirm your display variable is set:**
 
 ```bash
@@ -347,17 +316,7 @@ At least one line should appear. If the output is empty, revisit Step 1.
 docker compose -f docker-compose.dev.yml build
 ```
 
-The first build takes 20 to 40 minutes depending on your machine. If you have more than 16 GB of RAM, you can speed up the PX4 compile step by editing `docker/Dockerfile.dev` and changing:
-
-```
-MAKEFLAGS="-j2"
-```
-
-to:
-
-```
-MAKEFLAGS="-j4"
-```
+The first build takes 20 to 40 minutes depending on your machine. PX4 is compiled from source during the build — this is the longest step.
 
 ---
 
@@ -367,16 +326,202 @@ MAKEFLAGS="-j4"
 docker compose -f docker-compose.dev.yml up
 ```
 
-The Gazebo window will appear on your desktop. The `drone_px4` container waits 8 seconds for Gazebo to finish loading before PX4 starts — this is normal.
+The Gazebo window will appear on your desktop within a few seconds. The `drone_px4` container waits 20 seconds for Gazebo to finish loading before PX4 starts — this is normal.
 
-### Headless Mode (No Display)
+When fully started you will see:
 
-If you are running on a server with no display, remove the `DISPLAY` and `/tmp/.X11-unix` entries from `docker-compose.dev.yml` and connect a VNC viewer to `localhost:5900`. The password is `px4vnc`.
+```
+INFO  [commander] Ready for takeoff!
+```
+
+in the `drone_px4` logs. At this point the drone is spawned in Gazebo, all sensors are live, and the simulation is ready to accept commands.
 
 ### Stop
 
 ```bash
 docker compose -f docker-compose.dev.yml down
+```
+
+---
+
+## Using the Container
+
+### Open a Shell
+
+Open an interactive shell inside the simulation container:
+
+```bash
+docker exec -it drone_sim_dev bash
+```
+
+Or inside the PX4 container:
+
+```bash
+docker exec -it drone_px4 bash
+```
+
+Source ROS 2 inside any shell you open this way:
+
+```bash
+source /opt/ros/jazzy/setup.bash
+```
+
+---
+
+### PX4 Flight Commands
+
+PX4 module commands (`commander`, `param`, `listener`, etc.) are internal to the PX4 runtime — they are not Linux binaries. There are two ways to send them.
+
+#### Option A — px4-commander binary (recommended)
+
+The PX4 build exposes module commands as prefixed binaries inside the build directory. Run them directly with `docker exec`:
+
+```bash
+# Check vehicle status
+docker exec drone_px4 bash -c "
+  cd /px4/build/px4_sitl_default && ./bin/px4-commander status
+"
+
+# Arm the drone
+docker exec drone_px4 bash -c "
+  cd /px4/build/px4_sitl_default && ./bin/px4-commander arm
+"
+
+# Take off
+docker exec drone_px4 bash -c "
+  cd /px4/build/px4_sitl_default && ./bin/px4-commander takeoff
+"
+
+# Land
+docker exec drone_px4 bash -c "
+  cd /px4/build/px4_sitl_default && ./bin/px4-commander land
+"
+
+# Switch to Position Control mode
+docker exec drone_px4 bash -c "
+  cd /px4/build/px4_sitl_default && ./bin/px4-commander mode posctl
+"
+
+# Set a parameter
+docker exec drone_px4 bash -c "
+  cd /px4/build/px4_sitl_default && ./bin/px4-param set MPC_XY_VEL_MAX 5.0
+"
+```
+
+#### Option B — QGroundControl (full GUI)
+
+QGroundControl is the standard ground control station for PX4. It gives you a map view, HUD, parameter editor, and one-click takeoff/land/RTL.
+
+**Install QGroundControl on your host machine:**
+
+Download from [https://docs.qgroundcontrol.com/master/en/qgc-user-guide/getting_started/download_and_install.html](https://docs.qgroundcontrol.com/master/en/qgc-user-guide/getting_started/download_and_install.html)
+
+**Connect to the simulation:**
+
+PX4 SITL listens for MAVLink GCS connections on UDP port 14550. QGroundControl auto-detects this by default. Just launch QGroundControl while the simulation is running — it will connect automatically within a few seconds.
+
+If it does not connect automatically, add a comm link manually:
+
+1. Open **Application Settings** → **Comm Links**
+2. Click **Add**
+3. Set Type to **UDP**, port to **14550**
+4. Click **Connect**
+
+**What you can do in QGroundControl:**
+
+- View live telemetry: altitude, speed, attitude, battery, GPS fix
+- Arm and take off with the Takeoff button in the toolbar
+- Set a target altitude for takeoff
+- Switch flight modes from the mode selector
+- Draw and upload waypoint missions
+- View and edit all PX4 parameters
+- Monitor sensor health and preflight checks
+- Stream video from the depth camera (if configured)
+
+---
+
+### ROS 2 Topics
+
+All `ros2` commands must be run with the ROS environment sourced. The easiest way is to prefix every `docker exec` call with the source command:
+
+```bash
+docker exec drone_ros bash -c "source /opt/ros/jazzy/setup.bash && ros2 topic list"
+```
+
+#### Active topics
+
+When the simulation is running, the following topics are available:
+
+| Topic | Message Type | Source | Description |
+|---|---|---|---|
+| `/clock` | `rosgraph_msgs/msg/Clock` | Gazebo | Simulation time |
+| `/imu` | `sensor_msgs/msg/Imu` | Gazebo IMU sensor | Linear acceleration + angular velocity at 250 Hz |
+| `/gps` | `sensor_msgs/msg/NavSatFix` | Gazebo NavSat sensor | GPS latitude, longitude, altitude at 10 Hz |
+| `/oakd/color/image` | `sensor_msgs/msg/Image` | OAK-D camera | RGB color image at 30 Hz |
+| `/oakd/color/camera_info` | `sensor_msgs/msg/CameraInfo` | OAK-D camera | Intrinsics for the color camera |
+| `/oakd/depth/image` | `sensor_msgs/msg/Image` | OAK-D depth sensor | Depth image at 30 Hz |
+| `/oakd/depth/points` | `sensor_msgs/msg/PointCloud2` | OAK-D depth sensor | 3D point cloud from depth camera |
+| `/lidar/points` | `sensor_msgs/msg/PointCloud2` | 2D lidar | 360° laser scan as point cloud at 10 Hz |
+| `/model/x500_depth_0/odometry` | `nav_msgs/msg/Odometry` | Gazebo | Ground-truth pose and velocity |
+
+#### Useful commands
+
+**List all active topics:**
+
+```bash
+docker exec drone_ros bash -c "source /opt/ros/jazzy/setup.bash && ros2 topic list"
+```
+
+**Print messages from a topic:**
+
+```bash
+docker exec drone_ros bash -c "source /opt/ros/jazzy/setup.bash && ros2 topic echo /imu"
+docker exec drone_ros bash -c "source /opt/ros/jazzy/setup.bash && ros2 topic echo /gps"
+docker exec drone_ros bash -c "source /opt/ros/jazzy/setup.bash && ros2 topic echo /model/x500_depth_0/odometry"
+```
+
+**Check publish rates:**
+
+```bash
+docker exec drone_ros bash -c "source /opt/ros/jazzy/setup.bash && ros2 topic hz /imu"
+docker exec drone_ros bash -c "source /opt/ros/jazzy/setup.bash && ros2 topic hz /gps"
+docker exec drone_ros bash -c "source /opt/ros/jazzy/setup.bash && ros2 topic hz /lidar/points"
+docker exec drone_ros bash -c "source /opt/ros/jazzy/setup.bash && ros2 topic hz /oakd/depth/image"
+```
+
+**Inspect message type and fields:**
+
+```bash
+docker exec drone_ros bash -c "source /opt/ros/jazzy/setup.bash && ros2 topic info /imu"
+docker exec drone_ros bash -c "source /opt/ros/jazzy/setup.bash && ros2 interface show sensor_msgs/msg/Imu"
+```
+
+**Check gz-level topics directly (bypasses the ROS bridge):**
+
+```bash
+docker exec drone_sim_dev gz topic -l
+docker exec drone_sim_dev gz topic -e -t /world/outdoor_field/model/x500_depth_0/link/base_link/sensor/imu_sensor/imu -n 1
+```
+
+#### Subscribing from your own ROS 2 node
+
+Your ROS 2 packages run in the `drone_ros` container and can subscribe to any of the topics above directly. The gz bridge is already running so no extra setup is needed. Example subscriber in Python:
+
+```python
+import rclpy
+from rclpy.node import Node
+from sensor_msgs.msg import NavSatFix
+
+class GpsSubscriber(Node):
+    def __init__(self):
+        super().__init__('gps_sub')
+        self.create_subscription(NavSatFix, '/gps', self.callback, 10)
+
+    def callback(self, msg):
+        self.get_logger().info(f'Lat: {msg.latitude:.6f}  Lon: {msg.longitude:.6f}')
+
+rclpy.init()
+rclpy.spin(GpsSubscriber())
 ```
 
 ---
@@ -514,14 +659,16 @@ This only needs to be done the first time, or whenever you add new packages.
 Open a shell inside the running container:
 
 ```bash
-docker exec -it drone_sim_dev bash
+docker exec -it drone_ros bash
 ```
 
 Then build the workspace:
 
 ```bash
+source /opt/ros/jazzy/setup.bash
 cd /drone_sim/ros2_ws
 colcon build --symlink-install
+source install/setup.bash
 ```
 
 ---
@@ -530,25 +677,31 @@ colcon build --symlink-install
 
 ```
 Simulation/
-├── docker-compose.dev.yml   # main compose file
-├── .env                     # local config (gitignored, copy from .env.example)
-├── .env.example             # GPU and port configuration template — copy to .env before building
+├── docker-compose.dev.yml      # main compose file
+├── .env                        # local config (gitignored, copy from .env.example)
+├── .env.example                # template
 │
 ├── docker/
-│   ├── Dockerfile.dev       # container image definition
-│   └── entrypoint.sh        # ROS 2 environment setup at container start
+│   ├── Dockerfile.dev          # container image definition
+│   └── entrypoint.sh           # ROS 2 environment setup at container start
 │
 ├── worlds/
-│   └── outdoor_field.sdf    # default Gazebo world
+│   └── outdoor_field.sdf       # Gazebo world with landing pad and obstacles
 │
 ├── models/
-│   └── your_drone/          # drone model files (.sdf, .config, meshes/)
+│   └── x500_depth/             # local x500_depth model override (adds lidar)
+│       ├── model.sdf
+│       └── model.config
+│
+├── config/
+│   ├── ros_gz_bridge.yaml      # gz <-> ROS 2 topic bridge configuration
+│   ├── simulation_launch.py    # ROS 2 launch file (bridge + mavros)
+│   └── px4_params.yaml         # PX4 parameter overrides
 │
 ├── ros2_ws/
-│   └── src/                 # ROS 2 packages
+│   └── src/                    # your ROS 2 packages go here
 │
-├── config/                  # ROS 2 params and flight configs
-└── scripts/                 # helper scripts
+└── scripts/                    # helper scripts
 ```
 
 The `ros2_ws/build/`, `ros2_ws/install/`, and `ros2_ws/log/` directories are generated by `colcon` and can be safely deleted. They will be recreated on the next build.
@@ -557,33 +710,45 @@ The `ros2_ws/build/`, `ros2_ws/install/`, and `ros2_ws/log/` directories are gen
 
 ## Troubleshooting
 
-**`could not select device driver "nvidia"`**  
+**`could not select device driver "nvidia"`**
 Remove the `deploy.resources` GPU block from your compose file. This setup uses Mesa software rendering and does not need an Nvidia GPU.
 
-**Gazebo crashes immediately or shows a black window**  
-Your `GPU_VENDOR` setting in `.env` may not match your hardware. Open `.env`, comment out all GPU lines to fall back to software rendering, then run `docker compose -f docker-compose.dev.yml down && docker compose -f docker-compose.dev.yml up` to confirm the issue is GPU-related before re-enabling your GPU block.
-
-**`Authorization required` / `could not connect to display`**  
+**`Authorization required` / `could not connect to display`**
 Redo the X11 display setup for your platform. Make sure `$DISPLAY` is set and the `xauth list` verification step shows at least one entry.
 
-**`/tmp/.docker.xauth: no such file or directory`**  
+**`/tmp/.docker.xauth: no such file or directory`**
 Run `touch /tmp/.docker.xauth` before the `xauth nmerge` command.
 
-**`xauth nlist` produces no output / auth file is empty**  
+**`xauth nlist` produces no output / auth file is empty**
 `$DISPLAY` was not set when you ran the xauth commands. Set it with `export DISPLAY=:0` and repeat the entire X11 setup block.
 
-**Gazebo opens but is very slow**  
+**Gazebo opens but is very slow**
 Expected on a VM without GPU acceleration. The renderer falls back to llvmpipe (software). Lower world complexity or reduce the render resolution in `worlds/outdoor_field.sdf`.
 
-**`colcon build` fails inside the container**  
+**`colcon build` fails inside the container**
 Confirm the workspace is mounted correctly: `ls /drone_sim/ros2_ws/src` should list your packages. If the directory is empty, check the volume mounts in `docker-compose.dev.yml`.
 
-**`param: not found` in PX4 startup logs**  
-The PX4 environment was not sourced before launch. Make sure your `docker-compose.dev.yml` command block sources `/opt/ros/jazzy/setup.bash` and `/px4/Tools/simulation/gz/setup_gz.bash` before calling the PX4 binary.
-
-**PX4 topics are not visible in `ros2 topic list`**  
-The `px4_ros_com` bridge may not be running. Inside `drone_sim_dev`, run `ros2 node list` and confirm you see a `micrortps_agent` or `micro_ros_agent` node. If not, start it manually:
-
+**`ros2: executable file not found in $PATH`**
+Always source ROS before running ros2 commands via `docker exec`:
 ```bash
-MicroXRCEAgent udp4 -p 8888
+docker exec drone_ros bash -c "source /opt/ros/jazzy/setup.bash && ros2 topic list"
+```
+
+**`commander: command not found` in bash**
+`commander` is an internal PX4 module, not a Linux binary. Use `./bin/px4-commander` from inside `/px4/build/px4_sitl_default/`, or use QGroundControl.
+
+**Sensors show as missing in PX4 (`Preflight Fail: Accel Sensor 0 missing`)**
+The world SDF is missing the sensor system plugins (`gz-sim-imu-system`, `gz-sim-air-pressure-system`, `gz-sim-navsat-system`). Verify they are present in `worlds/outdoor_field.sdf`.
+
+**QGroundControl does not connect**
+Make sure the simulation is fully started (`Ready for takeoff!` visible in logs) before launching QGroundControl. PX4 SITL listens on UDP port 14550. If auto-detect fails, add a manual UDP comm link to port 14550 in QGroundControl settings.
+
+**`/lidar/points` topic not appearing**
+Check that `worlds/outdoor_field.sdf` contains the `gz-sim-sensors-system` plugin with `<render_engine>ogre2</render_engine>`. The lidar sensor is rendered by the sensors system — it does not need a separate plugin.
+
+**PX4 exits immediately after Gazebo starts**
+The `sleep 20` in the px4 service is not long enough for your machine. Increase it to `sleep 30` in `docker-compose.dev.yml` and recreate the containers:
+```bash
+docker compose -f docker-compose.dev.yml down
+docker compose -f docker-compose.dev.yml up --force-recreate
 ```

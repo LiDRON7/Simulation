@@ -28,12 +28,20 @@
             name="gz::sim::systems::Sensors">
       <render_engine>ogre2</render_engine>
     </plugin>
+    <plugin filename="gz-sim-imu-system"
+            name="gz::sim::systems::Imu"/>
+    <plugin filename="gz-sim-air-pressure-system"
+            name="gz::sim::systems::AirPressure"/>
+    <plugin filename="gz-sim-navsat-system"
+            name="gz::sim::systems::NavSat"/>
+    <plugin filename="gz-sim-magnetometer-system"
+            name="gz::sim::systems::Magnetometer"/>
     <plugin filename="gz-sim-user-commands-system"
             name="gz::sim::systems::UserCommands"/>
     <plugin filename="gz-sim-scene-broadcaster-system"
             name="gz::sim::systems::SceneBroadcaster"/>
     <plugin filename="gz-sim-contact-system"
-            name="gz::sim::systems::Contact"/>
+	    name="gz::sim::systems::Contact"/>
 
     <!-- Wind — light breeze from the West, 3 m/s -->
     <plugin filename="gz-sim-wind-effects-system"
@@ -220,17 +228,6 @@
       <joint name="canopy_joint" type="fixed"><parent>trunk</parent><child>canopy</child></joint>
     </model>
 
-    <!-- ═════════════════ HEXACOPTER SPAWN ════════════════════════════ -->
-    <!--
-      The drone is included directly in the world so it spawns at startup.
-      Adjust <pose> to move the takeoff position.
-      GZ_SIM_RESOURCE_PATH must contain your models/ directory.
-    -->
-    <include>
-      <uri>model://x500_depth</uri>
-      <name>drone</name>
-      <pose>0 0 0.25 0 0 0</pose>   <!-- sitting on the landing pad -->
-    </include>
-
   </world>
 </sdf>
+
