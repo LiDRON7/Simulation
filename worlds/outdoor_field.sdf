@@ -41,7 +41,7 @@
     <plugin filename="gz-sim-scene-broadcaster-system"
             name="gz::sim::systems::SceneBroadcaster"/>
     <plugin filename="gz-sim-contact-system"
-            name="gz::sim::systems::Contact"/>
+	    name="gz::sim::systems::Contact"/>
 
     <!-- Wind — light breeze from the West, 3 m/s -->
     <plugin filename="gz-sim-wind-effects-system"

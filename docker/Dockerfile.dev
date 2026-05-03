@@ -12,6 +12,8 @@ RUN apt-get update && apt-get install -y \
     ros-jazzy-nav-msgs \
     ros-jazzy-tf2-ros \
     ros-jazzy-tf2-geometry-msgs \
+    ros-jazzy-mavros \
+    ros-jazzy-mavros-extras \
     python3-colcon-common-extensions \
     python3-pip \
     x11-apps \
@@ -20,6 +22,9 @@ RUN apt-get update && apt-get install -y \
     htop \
     screen \
     && rm -rf /var/lib/apt/lists/*
+
+# ─── Install GeographicLib datasets (required by mavros) ─────────────────────
+RUN /opt/ros/jazzy/lib/mavros/install_geographiclib_datasets.sh
 
 # ─── Software rendering fallback ─────────────────────────────────────────────
 RUN apt-get update && apt-get install -y \
@@ -39,10 +44,6 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # ─── Install Gazebo Harmonic system libraries from osrfoundation ─────────────
-# PX4's CMakeLists uses plain find_package(gz-transport13) etc. — it does NOT
-# understand the ROS vendor shim pattern. So we need real system-level gz dev
-# headers that pkg-config can find directly (under /usr, not /opt/ros/jazzy/).
-# These coexist fine with the ROS vendor packages; they just add system copies.
 RUN wget https://packages.osrfoundation.org/gazebo.gpg \
         -O /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg && \
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] \
@@ -59,17 +60,12 @@ RUN git clone --depth 1 --branch v1.15.0 --recursive \
 # ─── PX4 Python deps ─────────────────────────────────────────────────────────
 RUN pip3 install --break-system-packages -r /px4/Tools/setup/requirements.txt
 
-# ─── Build PX4 SITL — pure compile step, nothing launches ────────────────────
-# gz-harmonic is now on the system pkg-config path so CMake finds it directly.
-# We only call make px4_sitl_default (no model suffix) — this compiles
-# gz_bridge without trying to launch a simulator.
+# ─── Build PX4 SITL ──────────────────────────────────────────────────────────
 RUN /bin/bash -c " \
     cd /px4 && \
     make px4_sitl_default \
 "
 
-# Strip only the main px4 binary — do NOT delete anything else.
-# gz_bridge and other Gazebo artifacts live alongside it and must survive.
 RUN strip /px4/build/px4_sitl_default/bin/px4
 
 ENV GZ_SIM_RESOURCE_PATH=/drone_sim/models:/drone_sim/worlds:/px4/Tools/simulation/gz/models

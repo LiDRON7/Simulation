@@ -1,5 +1,4 @@
 # ROS 2 <-> Gazebo topic bridge
-# Topic names match what gz topic -l reports for x500_depth in outdoor_field world
 
 - ros_topic_name: "/clock"
   gz_topic_name: "/clock"
@@ -7,7 +6,6 @@
   gz_type_name: "gz.msgs.Clock"
   direction: GZ_TO_ROS
 
-# ── Depth camera (OAK-D) ──────────────────────────────────────────────────────
 - ros_topic_name: "/oakd/color/image"
   gz_topic_name: "/camera"
   ros_type_name: "sensor_msgs/msg/Image"
@@ -32,21 +30,24 @@
   gz_type_name: "gz.msgs.PointCloudPacked"
   direction: GZ_TO_ROS
 
-# ── IMU ───────────────────────────────────────────────────────────────────────
+- ros_topic_name: "/lidar/points"
+  gz_topic_name: "/lidar/points"
+  ros_type_name: "sensor_msgs/msg/PointCloud2"
+  gz_type_name: "gz.msgs.PointCloudPacked"
+  direction: GZ_TO_ROS
+
 - ros_topic_name: "/imu"
   gz_topic_name: "/imu"
   ros_type_name: "sensor_msgs/msg/Imu"
   gz_type_name: "gz.msgs.IMU"
   direction: GZ_TO_ROS
 
-# ── GPS / NavSat ──────────────────────────────────────────────────────────────
 - ros_topic_name: "/gps"
   gz_topic_name: "/navsat"
   ros_type_name: "sensor_msgs/msg/NavSatFix"
   gz_type_name: "gz.msgs.NavSat"
   direction: GZ_TO_ROS
 
-# ── Odometry ──────────────────────────────────────────────────────────────────
 - ros_topic_name: "/model/x500_depth_0/odometry"
   gz_topic_name: "/model/x500_depth_0/odometry"
   ros_type_name: "nav_msgs/msg/Odometry"

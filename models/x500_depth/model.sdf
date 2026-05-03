@@ -13,44 +13,6 @@
       <child>OakD-Lite/base_link</child>
       <pose relative_to="base_link">.12 .03 .242 0 0 0</pose>
     </joint>
-
-    <!-- Magnetometer sensor — required for PX4 compass/yaw estimate -->
-    <link name="base_link">
-      <sensor name="magnetometer_sensor" type="magnetometer">
-        <always_on>1</always_on>
-        <update_rate>10</update_rate>
-        <magnetometer>
-          <x>
-            <noise type="gaussian">
-              <mean>0</mean>
-              <stddev>0.0004</stddev>
-              <bias_mean>0.0000786</bias_mean>
-              <bias_stddev>0.0000037</bias_stddev>
-              <precision>0.001</precision>
-            </noise>
-          </x>
-          <y>
-            <noise type="gaussian">
-              <mean>0</mean>
-              <stddev>0.0004</stddev>
-              <bias_mean>0.0000786</bias_mean>
-              <bias_stddev>0.0000037</bias_stddev>
-              <precision>0.001</precision>
-            </noise>
-          </y>
-          <z>
-            <noise type="gaussian">
-              <mean>0</mean>
-              <stddev>0.0004</stddev>
-              <bias_mean>0.0000786</bias_mean>
-              <bias_stddev>0.0000037</bias_stddev>
-              <precision>0.001</precision>
-            </noise>
-          </z>
-        </magnetometer>
-      </sensor>
-    </link>
-
   </model>
 </sdf>
 
