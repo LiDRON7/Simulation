@@ -141,7 +141,7 @@ Download UTM from [https://mac.getutm.app](https://mac.getutm.app) and install i
 
 ### 2. Create an Ubuntu 24.04 VM
 
-1. Download the Ubuntu 24.04 Server ISO from [https://ubuntu.com/download/server](https://ubuntu.com/download/server).
+1. Download the Ubuntu 24.04 Server ISO (ARM version if you have an M series Mac... most of you do so download this) from [https://ubuntu.com/download/server](https://ubuntu.com/download/server).
 2. Open UTM and click **Create a New Virtual Machine**.
 3. Select **Virtualize** (Apple Silicon) or **Emulate** (Intel Mac, slower).
 4. Choose **Linux** and point it at the ISO you downloaded.
