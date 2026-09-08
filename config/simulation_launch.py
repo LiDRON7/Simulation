@@ -19,7 +19,7 @@ def generate_launch_description():
             Node(
                 package="mavros",
                 executable="mavros_node",
-                name="mavros",
+                namespace="mavros",
                 output="screen",
                 parameters=[{
                     "fcu_url": LaunchConfiguration("fcu_url"),
