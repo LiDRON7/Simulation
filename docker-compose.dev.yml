@@ -71,6 +71,7 @@ services:
       dockerfile: docker/Dockerfile.dev
     container_name: drone_ros
     network_mode: host
+    ipc: host
     environment:
       - GZ_IP=127.0.0.1
       - GZ_SIM_RESOURCE_PATH=/drone_sim/models:/drone_sim/worlds:/px4/Tools/simulation/gz/models
