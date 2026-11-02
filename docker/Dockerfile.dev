@@ -58,7 +58,11 @@ RUN git clone --depth 1 --branch v1.15.0 --recursive \
     https://github.com/PX4/PX4-Autopilot.git /px4
 
 # ─── PX4 Python deps ─────────────────────────────────────────────────────────
-RUN pip3 install --break-system-packages -r /px4/Tools/setup/requirements.txt
+RUN printf "numpy==1.26.4\npandas==2.2.3\n" \
+      > /tmp/px4-constraints.txt \
+    && pip3 install --break-system-packages \
+      --constraint /tmp/px4-constraints.txt \
+      -r /px4/Tools/setup/requirements.txt
 
 # ─── Build PX4 SITL ──────────────────────────────────────────────────────────
 RUN /bin/bash -c " \
