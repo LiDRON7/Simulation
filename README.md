@@ -1,760 +1,259 @@
-# LiDRON Simulation Environment
+# LiDRON Simulation
 
-ROS 2 Jazzy · Gazebo Harmonic · PX4 · Docker
+PX4, Gazebo and ROS 2 in Docker, flying our two drones as they are drawn in the CAD.
 
----
+![Huntsman hovering over the landing pad in the simulator](docs/img/hover-field.png)
 
-## Table of Contents
+## Run it
 
-- [Overview](#overview)
-- [Requirements](#requirements)
-- [GPU Configuration](#gpu-configuration)
-- [Setup: Linux (Ubuntu 24.04)](#setup-linux-ubuntu-2404)
-- [Setup: macOS (via UTM Virtual Machine)](#setup-macos-via-utm-virtual-machine)
-- [Setup: Windows (via WSL 2)](#setup-windows-via-wsl-2)
-- [Build the Image](#build-the-image)
-- [Run the Simulation](#run-the-simulation)
-- [Using the Container](#using-the-container)
-- [Build the ROS 2 Workspace](#build-the-ros-2-workspace)
-- [Repository Structure](#repository-structure)
-- [Troubleshooting](#troubleshooting)
+1. Get the code and the settings file:
 
----
+   ```bash
+   git clone https://github.com/LiDRON7/Simulation.git
+   cd Simulation
+   cp .env.example .env
+   ```
 
-## Overview
+2. Open `.env` and set the lines for your machine:
 
-This repository packages a full drone simulation stack inside Docker. Gazebo handles the physics and rendering, PX4 runs as the flight controller, and your ROS 2 packages communicate with both over standard interfaces. The container runs the same way on a native Linux machine or a Linux VM on macOS.
+   | Your machine | Set in `.env` |
+   |---|---|
+   | Linux desktop with a GPU | your `GPU_VENDOR`, then do the [window setup](#the-gazebo-window-linux-desktop) |
+   | No desktop, or you are on ssh | `HEADLESS=1` |
+   | Laptop with no GPU, or a Mac with Docker Desktop | `HEADLESS=1`, and `SENSORS=off` if it runs too slowly |
 
-It flies our two drones, built from the CAD in [Drone-Construction](https://github.com/LiDRON7/Drone-Construction):
+3. Start it. The first build takes about 20 minutes and 10 GB, because it compiles PX4.
 
-| Drone | What it is | Sensors in the sim |
+   ```bash
+   docker compose -f docker-compose.dev.yml up --build
+   ```
+
+4. In a second terminal, check that it flies:
+
+   ```bash
+   tools/hover_test.sh
+   ```
+
+   ```
+   drone: huntsman. Waiting for PX4 (up to 2 minutes)...
+   hover: Gazebo says 2.22 m up, PX4 says 2.25 m
+   motors: control: [0.57446, 0.57393, 0.56995, 0.57843, 0.57188, 0.57650]
+   landed and disarmed
+   PASS
+   ```
+
+Stop it with `docker compose -f docker-compose.dev.yml down`.
+
+## Pick the drone
+
+Set `DRONE=huntsman` or `DRONE=widow` in `.env`, then restart.
+
+| `huntsman` (default) | `widow` |
+|---|---|
+| ![Huntsman in the simulator](docs/img/huntsman.png) | ![Widow in the simulator](docs/img/widow.png) |
+| Tarot 680 PRO, 4.46 kg | Storm Drone 6 V3, 2.00 kg |
+| OAK-D Pro camera and a Velodyne Puck LITE on its side | OAK-D Pro camera, no LiDAR |
+
+Both wear their rain covers, as in the CAD.
+
+## Fly it by hand
+
+PX4 takes commands through `docker exec`:
+
+```bash
+px4() { docker exec -w /px4/build/px4_sitl_default drone_px4 ./bin/px4-"$@"; }
+
+px4 commander check      # Preflight check: OK
+px4 commander takeoff    # climbs to 2.5 m and holds
+px4 commander land
+px4 listener vehicle_local_position -n 1
+```
+
+![Huntsman a few seconds after takeoff](docs/img/hover-close.png)
+
+Where PX4 thinks it is, next to where Gazebo has it:
+
+```
+$ px4 listener vehicle_local_position -n 1
+    x: -0.35275
+    y: 0.09305
+    z: -2.80928          (down is positive, so this is 2.8 m up)
+$ docker exec drone_sim_dev gz model -m huntsman_0 -p
+  - Pose [ XYZ (m) ] [ RPY (rad) ]:
+    [0.000296 -0.107731 3.523510]
+    [-0.004370 -0.000580 -0.010772]
+```
+
+The two heights do not agree exactly. In my runs they were between a few centimetres and 1.3 m apart, and the stock x500 shows it in this world too. I have not found the cause.
+
+On Linux, QGroundControl on the same machine connects by itself (UDP 14550) and gives you the map and the takeoff button.
+
+## What the drone sees
+
+The camera, with the two front prop guards along the top edge:
+
+![View from Huntsman's OAK-D camera while hovering: two crates and a pole on the field](docs/img/onboard-camera.png)
+
+Its depth image. The guards are the yellow shapes 0.2 to 0.3 m away:
+
+![Depth image from the same position](docs/img/onboard-depth.png)
+
+One scan from Huntsman's LiDAR at 3.5 m up. The ground comes out flat 3.5 m below, with the crates at 10 and 15 m and the pole at 20 m:
+
+![One LiDAR scan: side view and top view](docs/img/lidar-scan.png)
+
+The LiDAR lies on its side, so it scans a band from front to back under the drone. About 40 % of its returns hit the drone itself. `Autonomous-Systems` turns the cloud with `lidar_mount_rpy_deg: [90, 135, 0]`, which is how the plot above was made, and its self-filter box drops every one of the drone's own returns in this scan.
+
+The same data in ROS 2:
+
+```bash
+docker exec drone_ros bash -c "source /opt/ros/jazzy/setup.bash && ros2 topic list"
+```
+
+```
+/clock
+/gps
+/imu
+/lidar/points
+/oakd/color/camera_info
+/oakd/color/image
+/oakd/depth/image
+/oakd/depth/points
+```
+
+| Topic | Type | What |
 |---|---|---|
-| `huntsman` (default) | Tarot 680 PRO, about 4.5 kg | OAK-D Pro camera, Velodyne Puck LITE on its side (scans front to back under the drone) |
-| `widow` | Storm Drone 6 V3, about 2 kg | OAK-D Pro camera, no LiDAR |
+| `/oakd/color/image` | `sensor_msgs/Image` | camera, 1280 x 720 |
+| `/oakd/depth/image` | `sensor_msgs/Image` | depth in metres, 640 x 480, sees 0.2 to 19 m |
+| `/oakd/depth/points` | `sensor_msgs/PointCloud2` | the depth image as points |
+| `/lidar/points` | `sensor_msgs/PointCloud2` | 16 beams x 1800 points, in the LiDAR's own frame (Huntsman only) |
+| `/imu` | `sensor_msgs/Imu` | 250 Hz |
+| `/gps` | `sensor_msgs/NavSatFix` | the field sits at UPRM, 18.2110 N 67.1409 W |
 
-Pick one with `DRONE=widow` or `DRONE=huntsman` in `.env`. Weight, balance, motor and sensor positions and the look
-come from the CAD. Motor thrust is an estimate until someone puts a motor on a thrust stand, so don't read flight
-time or top speed off the sim.
+With `SENSORS=off` the camera and LiDAR topics are listed but stay empty.
 
-`models/widow`, `models/huntsman` and `config/airframes` are generated. After a CAD change, rerun the Fusion
-full-drone script in Drone-Construction, then here:
+## Run the autonomy on it
 
-```bash
-python3 tools/cad_to_sdf.py
+With [Autonomous-Systems](https://github.com/LiDRON7/Autonomous-Systems) cloned next to this repo:
+
+1. Start both, from the Autonomous-Systems folder. It reads this repo's `.env`, so the drone is the same.
+
+   ```bash
+   ./scripts/simulation.sh up
+   ```
+
+2. In a second terminal, open a shell in the autonomy container:
+
+   ```bash
+   docker exec -it lidron_autonomy bash
+   source /autonomy/install/setup.bash
+   ```
+
+3. Check, set a destination 8 m north, and start:
+
+   ```bash
+   ros2 service call /autonomy/preflight_check std_srvs/srv/Trigger {}
+   ros2 service call /autonomy/set_local_destination interfaces/srv/SetLocalDestination '{north: 8.0, east: 0.0, down: 0.0}'
+   ros2 service call /autonomy/enable std_srvs/srv/SetBool '{data: true}'
+   ```
+
+4. Watch it: `ros2 topic echo /autonomy/state`
+
+What that mission did with Huntsman, state next to Gazebo's position (east, north, up in metres):
+
+```
+PREFLIGHT       [0.40 0.29 0.23]
+TAKEOFF         [0.58 0.25 1.93]
+TAKEOFF         [0.55 0.23 3.75]
+NAVIGATING      [0.64 2.06 3.89]
+NAVIGATING      [0.49 7.41 3.91]
+LANDING_CHECK   [0.48 8.36 3.77]
+LANDING         [0.52 8.34 2.88]
+LANDING         [0.46 8.16 0.21]
+COMPLETE        [0.46 8.16 0.21]
 ```
 
-The stack runs three containers:
+Widow flew the same mission and landed at 7.74 m north. It has no LiDAR, so it skips the landing check.
 
-| Container | Role |
+Two things from these runs:
+
+- PX4 was told 5 m and believed it was there. Gazebo had Huntsman at 3.7 m above the pad and Widow at 4.7 m. Do not trust simulated height to better than a metre yet.
+- Widow sat on the ground for about ten minutes before PX4 disarmed it. Huntsman disarmed within seconds.
+
+## The Gazebo window (Linux desktop)
+
+Without `HEADLESS=1`, Gazebo opens its window on your screen. Docker needs permission for that, once after every reboot:
+
+```bash
+xhost +local:docker
+touch /tmp/.docker.xauth
+xauth nlist $DISPLAY | sed -e 's/^..../ffff/' | xauth -f /tmp/.docker.xauth nmerge -
+```
+
+If `echo $DISPLAY` prints nothing, run `export DISPLAY=:0` first.
+
+I did not rerun the window on this branch. Everything on this page was run with `HEADLESS=1`, and the pictures come from cameras placed in the simulated world.
+
+## How fast it runs
+
+On my Mac (Docker Desktop, no GPU):
+
+| `.env` | Hover test | Speed |
+|---|---|---|
+| `HEADLESS=1`, `SENSORS=off` | passes for both drones | real time |
+| `HEADLESS=1` (sensors on) | passes for Huntsman | slower than real time: LiDAR about 3 scans a second and depth about 7 frames, against 10 and 30 |
+
+With a GPU, set `GPU_VENDOR` in `.env`. I have not run this branch on a GPU machine yet.
+
+## After a CAD change
+
+`models/` and `config/airframes/` are generated. Do not edit them.
+
+1. Rerun the full-drone script in Fusion ([Drone-Construction](https://github.com/LiDRON7/Drone-Construction), `3D Models/Fusion Scripts`). It writes `<Drone>/Full Drone/<drone>-checks.json`.
+2. Rebuild the models here, with Drone-Construction cloned next to this repo:
+
+   ```bash
+   python3 tools/cad_to_sdf.py
+   ```
+
+   ```
+   widow: 1996 g, inertia [0.0224, 0.0218, 0.0311] kg m2, hover throttle 0.59, thrust/weight 2.45 (EST), camera at [0.083, 0.001, -0.047], no lidar, skids 0.223 m under the centre of mass
+   huntsman: 4462 g, inertia [0.1024, 0.1075, 0.1912] kg m2, hover throttle 0.58, thrust/weight 2.55 (EST), camera at [0.134, 0.0, -0.037], lidar at [0.044, -0.002, -0.072], skids 0.211 m under the centre of mass
+   ```
+
+3. Run `tools/hover_test.sh` for each drone.
+
+To also rebuild the look, add `--mesh` (needs `pip install numpy scipy fast-simplification`). Huntsman's full-drone STL is too big for git, so export it from Fusion and pass `--stl huntsman=<file>`.
+
+## What is real and what is a guess
+
+| | Where it comes from |
 |---|---|
-| `drone_sim_dev` | Gazebo Harmonic simulation server + GUI |
-| `drone_px4` | PX4 SITL flight controller |
-| `drone_ros` | ROS 2 gz bridge + optional MAVROS |
+| Weight, centre of mass, motor and sensor positions, skids, the look | the CAD |
+| Moments of inertia | estimated from the weight table, good to about 20 % |
+| Motor thrust and top speed | a guess. Nobody has put a motor on a thrust stand yet |
 
----
+Hover throttle, flight time and top speed all depend on that guess, so do not read them off the simulator.
 
-## Requirements
+## When it breaks
 
-| Tool | Version |
+| What you see | Do this |
 |---|---|
-| Docker Engine | 24+ |
-| Docker Compose plugin | v2+ |
-| Git | any |
-| UTM _(macOS only)_ | 4+ |
+| `hover_test.sh` says PX4 never passed preflight | `docker logs drone_px4`. PX4 starts 20 s after Gazebo; on a slow machine give it a minute and rerun |
+| `Gazebo has no model called ..._0` | `DRONE` in `.env` is not the one that is running. Restart the stack |
+| No window, or `cannot open display` | set `HEADLESS=1`, or redo the window setup |
+| Everything crawls | set `SENSORS=off` |
+| A change to `.env` does nothing | `down`, then `up` again |
 
----
-
-## Setup: Linux (Ubuntu 24.04)
-
-### Install Docker
-
-Do not use the `apt install docker.io` package. Use the official install script instead:
-
-```bash
-curl -fsSL https://get.docker.com -o get-docker.sh
-sh get-docker.sh
-```
-
-Add your user to the `docker` group so you can run commands without `sudo`:
-
-```bash
-sudo usermod -aG docker $USER
-newgrp docker
-```
-
-Install the Compose plugin:
-
-```bash
-sudo apt-get install docker-compose-plugin
-```
-
-Verify both are working:
-
-```bash
-docker version
-docker compose version
-```
-
-### Clone the Repository
-
-```bash
-git clone https://github.com/LiDRON7/Simulation.git
-cd Simulation
-cp .env.example .env
-```
-
-Edit `.env` to set your GPU type — see [GPU Configuration](#gpu-configuration) above.
-
-### Configure X11 Display Access
-
-This must be repeated after every reboot. It grants the container permission to open windows on your local display.
-
-**Step 1 — Confirm your display variable is set:**
-
-```bash
-echo $DISPLAY
-```
-
-It should print something like `:0` or `:1`. If it is empty, set it manually:
-
-```bash
-export DISPLAY=:0
-```
-
-Do not continue until `$DISPLAY` is non-empty. The `xauth` command will produce no output and write nothing to the auth file if `$DISPLAY` is unset, and Gazebo will fail to open a window.
-
-**Step 2 — Grant Docker access and create the auth file:**
-
-```bash
-xhost +local:docker
-touch /tmp/.docker.xauth
-xauth nlist $DISPLAY | sed -e 's/^..../ffff/' | xauth -f /tmp/.docker.xauth nmerge -
-```
-
-**Step 3 — Verify the auth file has entries:**
-
-```bash
-xauth -f /tmp/.docker.xauth list
-```
-
-You should see at least one line containing your display number and a hex key, for example:
+## What is in here
 
 ```
-hostname/unix:0  MIT-MAGIC-COOKIE-1  <hex string>
-```
-
-If the output is empty, `$DISPLAY` was not set correctly in Step 1. Fix it and repeat from Step 2.
-
-You are ready to [build](#build-the-image).
-
----
-
-## Setup: macOS (via UTM Virtual Machine)
-
-Gazebo requires a Linux environment. On macOS, the recommended path is to run Ubuntu 24.04 inside a UTM virtual machine with a full desktop environment. The Gazebo GUI runs directly inside the VM window — no X forwarding needed.
-
-### 1. Install UTM
-
-Download UTM from [https://mac.getutm.app](https://mac.getutm.app) and install it.
-
-### 2. Create an Ubuntu 24.04 VM
-
-1. Download the Ubuntu 24.04 Server ISO (ARM version if you have an M series Mac... most of you do so download this) from [https://ubuntu.com/download/server](https://ubuntu.com/download/server).
-2. Open UTM and click **Create a New Virtual Machine**.
-3. Select **Virtualize** (Apple Silicon) or **Emulate** (Intel Mac, slower).
-4. Choose **Linux** and point it at the ISO you downloaded.
-5. Allocate at least **8 GB RAM** and **60 GB disk**.
-6. Complete the Ubuntu installer. Create a user and note the password.
-
-### 3. Install a Desktop Environment
-
-After the first boot, install Ubuntu Desktop and the SPICE guest agent:
-
-```bash
-sudo apt update
-sudo apt install ubuntu-desktop spice-vdagent
-sudo reboot
-```
-
-After the reboot, the VM will boot into a full graphical desktop. All remaining steps run inside a terminal in that desktop.
-
-### 4. Install Docker
-
-```bash
-curl -fsSL https://get.docker.com -o get-docker.sh
-sh get-docker.sh
-sudo usermod -aG docker $USER
-newgrp docker
-sudo apt-get install docker-compose-plugin
-```
-
-Verify:
-
-```bash
-docker version
-docker compose version
-```
-
-### 5. Clone the Repository
-
-```bash
-git clone https://github.com/LiDRON7/Simulation.git
-cd Simulation
-cp .env.example .env
-```
-
-Edit `.env` to set your GPU type — see [GPU Configuration](#gpu-configuration) above. For an Apple Silicon VM, the default (everything commented out) is correct.
-
-**Step 1 — Confirm your display variable is set:**
-
-```bash
-echo $DISPLAY
-```
-
-It should print something like `:0` or `:1`. If it is empty, run:
-
-```bash
-export DISPLAY=:0
-```
-
-**Step 2 — Grant Docker access and create the auth file:**
-
-```bash
-xhost +local:docker
-touch /tmp/.docker.xauth
-xauth nlist $DISPLAY | sed -e 's/^..../ffff/' | xauth -f /tmp/.docker.xauth nmerge -
-```
-
-**Step 3 — Verify the auth file has entries:**
-
-```bash
-xauth -f /tmp/.docker.xauth list
-```
-
-At least one line should appear. If the output is empty, revisit Step 1.
-
----
-
-## Setup: Windows (via WSL 2)
-
-Gazebo and Docker run inside a WSL 2 Ubuntu environment. The Gazebo GUI is handled by WSLg, which is built into Windows 11 and recent Windows 10 builds — no third-party X server needed.
-
-### 1. Enable WSL 2
-
-Open PowerShell as Administrator and run:
-
-```powershell
-wsl --install
-```
-
-This installs WSL 2 and Ubuntu by default. Restart your machine when prompted.
-
-If WSL was already installed but on version 1, upgrade it:
-
-```powershell
-wsl --set-default-version 2
-```
-
-### 2. Open Ubuntu
-
-Launch Ubuntu from the Start menu. On first run it will ask you to create a user and password.
-
-Verify WSLg is working by running a simple GUI app:
-
-```bash
-sudo apt update
-sudo apt install x11-apps -y
-xeyes
-```
-
-A small window with eyes should appear on your Windows desktop. If it does, WSLg is working and Gazebo will render the same way. Close it and continue.
-
-### 3. Install Docker
-
-Do not install Docker Desktop. Run the official script inside Ubuntu:
-
-```bash
-curl -fsSL https://get.docker.com -o get-docker.sh
-sh get-docker.sh
-sudo usermod -aG docker $USER
-newgrp docker
-sudo apt-get install docker-compose-plugin
-```
-
-Verify:
-
-```bash
-docker version
-docker compose version
-```
-
-### 4. Clone the Repository
-
-```bash
-git clone https://github.com/LiDRON7/Simulation.git
-cd Simulation
-cp .env.example .env
-```
-
-Edit `.env` to set your GPU type — see [GPU Configuration](#gpu-configuration) above.
-
-**Step 1 — Confirm your display variable is set:**
-
-```bash
-echo $DISPLAY
-```
-
-It should print something like `:0`. If it is empty, run:
-
-```bash
-export DISPLAY=:0
-```
-
-**Step 2 — Grant Docker access and create the auth file:**
-
-```bash
-xhost +local:docker
-touch /tmp/.docker.xauth
-xauth nlist $DISPLAY | sed -e 's/^..../ffff/' | xauth -f /tmp/.docker.xauth nmerge -
-```
-
-**Step 3 — Verify the auth file has entries:**
-
-```bash
-xauth -f /tmp/.docker.xauth list
-```
-
-At least one line should appear. If the output is empty, revisit Step 1.
-
----
-
-## Build the Image
-
-```bash
-docker compose -f docker-compose.dev.yml build
-```
-
-The first build takes 20 to 40 minutes depending on your machine. PX4 is compiled from source during the build — this is the longest step.
-
----
-
-## Run the Simulation
-
-```bash
-docker compose -f docker-compose.dev.yml up
-```
-
-The Gazebo window will appear on your desktop within a few seconds. The `drone_px4` container waits 20 seconds for Gazebo to finish loading before PX4 starts — this is normal.
-
-When fully started you will see:
-
-```
-INFO  [commander] Ready for takeoff!
-```
-
-in the `drone_px4` logs. At this point the drone is spawned in Gazebo, all sensors are live, and the simulation is ready to accept commands.
-
-### Stop
-
-```bash
-docker compose -f docker-compose.dev.yml down
-```
-
----
-
-## Using the Container
-
-### Open a Shell
-
-Open an interactive shell inside the simulation container:
-
-```bash
-docker exec -it drone_sim_dev bash
-```
-
-Or inside the PX4 container:
-
-```bash
-docker exec -it drone_px4 bash
-```
-
-Source ROS 2 inside any shell you open this way:
-
-```bash
-source /opt/ros/jazzy/setup.bash
-```
-
----
-
-### PX4 Flight Commands
-
-PX4 module commands (`commander`, `param`, `listener`, etc.) are internal to the PX4 runtime — they are not Linux binaries. There are two ways to send them.
-
-#### Option A — px4-commander binary (recommended)
-
-The PX4 build exposes module commands as prefixed binaries inside the build directory. Run them directly with `docker exec`:
-
-```bash
-# Check vehicle status
-docker exec drone_px4 bash -c "
-  cd /px4/build/px4_sitl_default && ./bin/px4-commander status
-"
-
-# Arm the drone
-docker exec drone_px4 bash -c "
-  cd /px4/build/px4_sitl_default && ./bin/px4-commander arm
-"
-
-# Take off
-docker exec drone_px4 bash -c "
-  cd /px4/build/px4_sitl_default && ./bin/px4-commander takeoff
-"
-
-# Land
-docker exec drone_px4 bash -c "
-  cd /px4/build/px4_sitl_default && ./bin/px4-commander land
-"
-
-# Switch to Position Control mode
-docker exec drone_px4 bash -c "
-  cd /px4/build/px4_sitl_default && ./bin/px4-commander mode posctl
-"
-
-# Set a parameter
-docker exec drone_px4 bash -c "
-  cd /px4/build/px4_sitl_default && ./bin/px4-param set MPC_XY_VEL_MAX 5.0
-"
-```
-
-#### Option B — QGroundControl (full GUI)
-
-QGroundControl is the standard ground control station for PX4. It gives you a map view, HUD, parameter editor, and one-click takeoff/land/RTL.
-
-**Install QGroundControl on your host machine:**
-
-Download from [https://docs.qgroundcontrol.com/master/en/qgc-user-guide/getting_started/download_and_install.html](https://docs.qgroundcontrol.com/master/en/qgc-user-guide/getting_started/download_and_install.html)
-
-**Connect to the simulation:**
-
-PX4 SITL listens for MAVLink GCS connections on UDP port 14550. QGroundControl auto-detects this by default. Just launch QGroundControl while the simulation is running — it will connect automatically within a few seconds.
-
-If it does not connect automatically, add a comm link manually:
-
-1. Open **Application Settings** → **Comm Links**
-2. Click **Add**
-3. Set Type to **UDP**, port to **14550**
-4. Click **Connect**
-
-**What you can do in QGroundControl:**
-
-- View live telemetry: altitude, speed, attitude, battery, GPS fix
-- Arm and take off with the Takeoff button in the toolbar
-- Set a target altitude for takeoff
-- Switch flight modes from the mode selector
-- Draw and upload waypoint missions
-- View and edit all PX4 parameters
-- Monitor sensor health and preflight checks
-- Stream video from the depth camera (if configured)
-
----
-
-### ROS 2 Topics
-
-All `ros2` commands must be run with the ROS environment sourced. The easiest way is to prefix every `docker exec` call with the source command:
-
-```bash
-docker exec drone_ros bash -c "source /opt/ros/jazzy/setup.bash && ros2 topic list"
-```
-
-#### Active topics
-
-When the simulation is running, the following topics are available:
-
-| Topic | Message Type | Source | Description |
-|---|---|---|---|
-| `/clock` | `rosgraph_msgs/msg/Clock` | Gazebo | Simulation time |
-| `/imu` | `sensor_msgs/msg/Imu` | Gazebo IMU sensor | Linear acceleration + angular velocity at 250 Hz |
-| `/gps` | `sensor_msgs/msg/NavSatFix` | Gazebo NavSat sensor | GPS latitude, longitude, altitude at 10 Hz |
-| `/oakd/color/image` | `sensor_msgs/msg/Image` | OAK-D camera | RGB color image at 30 Hz |
-| `/oakd/color/camera_info` | `sensor_msgs/msg/CameraInfo` | OAK-D camera | Intrinsics for the color camera |
-| `/oakd/depth/image` | `sensor_msgs/msg/Image` | OAK-D depth sensor | Depth image at 30 Hz |
-| `/oakd/depth/points` | `sensor_msgs/msg/PointCloud2` | OAK-D depth sensor | 3D point cloud from depth camera |
-| `/lidar/points` | `sensor_msgs/msg/PointCloud2` | Puck LITE (Huntsman only) | 16-beam scan as a point cloud at 10 Hz, in the LiDAR's own frame |
-
-#### Useful commands
-
-**List all active topics:**
-
-```bash
-docker exec drone_ros bash -c "source /opt/ros/jazzy/setup.bash && ros2 topic list"
-```
-
-**Print messages from a topic:**
-
-```bash
-docker exec drone_ros bash -c "source /opt/ros/jazzy/setup.bash && ros2 topic echo /imu"
-docker exec drone_ros bash -c "source /opt/ros/jazzy/setup.bash && ros2 topic echo /gps"
-```
-
-**Check publish rates:**
-
-```bash
-docker exec drone_ros bash -c "source /opt/ros/jazzy/setup.bash && ros2 topic hz /imu"
-docker exec drone_ros bash -c "source /opt/ros/jazzy/setup.bash && ros2 topic hz /gps"
-docker exec drone_ros bash -c "source /opt/ros/jazzy/setup.bash && ros2 topic hz /lidar/points"
-docker exec drone_ros bash -c "source /opt/ros/jazzy/setup.bash && ros2 topic hz /oakd/depth/image"
-```
-
-**Inspect message type and fields:**
-
-```bash
-docker exec drone_ros bash -c "source /opt/ros/jazzy/setup.bash && ros2 topic info /imu"
-docker exec drone_ros bash -c "source /opt/ros/jazzy/setup.bash && ros2 interface show sensor_msgs/msg/Imu"
-```
-
-**Check gz-level topics directly (bypasses the ROS bridge):**
-
-```bash
-docker exec drone_sim_dev gz topic -l
-docker exec drone_sim_dev gz topic -e -t /world/outdoor_field/model/huntsman_0/link/base_link/sensor/imu_sensor/imu -n 1
-```
-
-#### Subscribing from your own ROS 2 node
-
-Your ROS 2 packages run in the `drone_ros` container and can subscribe to any of the topics above directly. The gz bridge is already running so no extra setup is needed. Example subscriber in Python:
-
-```python
-import rclpy
-from rclpy.node import Node
-from sensor_msgs.msg import NavSatFix
-
-class GpsSubscriber(Node):
-    def __init__(self):
-        super().__init__('gps_sub')
-        self.create_subscription(NavSatFix, '/gps', self.callback, 10)
-
-    def callback(self, msg):
-        self.get_logger().info(f'Lat: {msg.latitude:.6f}  Lon: {msg.longitude:.6f}')
-
-rclpy.init()
-rclpy.spin(GpsSubscriber())
-```
-
----
-
-## Using the Container
-
-### Open a Shell
-
-Open an interactive shell inside the simulation container:
-
-```bash
-docker exec -it drone_sim_dev bash
-```
-
-Or inside the PX4 container:
-
-```bash
-docker exec -it drone_px4 bash
-```
-
-The ROS 2 environment is sourced automatically by the entrypoint, so `ros2` commands work immediately in any shell you open this way.
-
----
-
-### PX4 Commands
-
-PX4 exposes a MAVLink shell over UDP. The recommended way to send commands interactively is via the `mavlink_shell.py` script included with PX4.
-
-**Open the MAVLink shell:**
-
-```bash
-docker exec -it drone_px4 bash
-cd /px4
-python3 Tools/mavlink_shell.py
-```
-
-Once connected you will see the `nsh>` prompt. Useful commands:
-
-| Command                           | Description                                           |
-| --------------------------------- | ----------------------------------------------------- |
-| `commander status`                | Show arming state, flight mode, and health flags      |
-| `commander arm`                   | Arm the drone (requires no failsafes active)          |
-| `commander disarm`                | Disarm the drone                                      |
-| `commander takeoff`               | Take off to the default altitude                      |
-| `commander land`                  | Land at the current position                          |
-| `commander mode posctl`           | Switch to Position Control mode                       |
-| `commander mode offboard`         | Switch to Offboard mode (needed for ROS 2 control)    |
-| `param show <name>`               | Print the value of a parameter                        |
-| `param set <name> <value>`        | Set a parameter (e.g. `param set MPC_XY_VEL_MAX 5.0`) |
-| `listener vehicle_local_position` | Stream position estimates to the terminal             |
-| `listener vehicle_status`         | Stream vehicle status                                 |
-| `top`                             | Show PX4 task CPU and memory usage                    |
-
-Exit the shell with `Ctrl+C` or type `exit`.
-
-**Arm and take off in one sequence (quick test):**
-
-```bash
-commander arm && commander takeoff
-```
-
----
-
-### ROS 2 Topics
-
-All ROS 2 commands below run inside the `drone_sim_dev` container.
-
-**List all active topics:**
-
-```bash
-ros2 topic list
-```
-
-**Common topics published by PX4 via `px4_ros_com`:**
-
-| Topic                              | Message Type                     | Description                               |
-| ---------------------------------- | -------------------------------- | ----------------------------------------- |
-| `/fmu/out/vehicle_local_position`  | `px4_msgs/VehicleLocalPosition`  | NED position and velocity estimate        |
-| `/fmu/out/vehicle_global_position` | `px4_msgs/VehicleGlobalPosition` | GPS latitude, longitude, altitude         |
-| `/fmu/out/vehicle_attitude`        | `px4_msgs/VehicleAttitude`       | Orientation quaternion                    |
-| `/fmu/out/vehicle_status`          | `px4_msgs/VehicleStatus`         | Arming state, nav state, flight mode      |
-| `/fmu/out/sensor_combined`         | `px4_msgs/SensorCombined`        | Raw IMU (gyro + accelerometer)            |
-| `/fmu/out/battery_status`          | `px4_msgs/BatteryStatus`         | Battery voltage and percentage            |
-| `/fmu/in/trajectory_setpoint`      | `px4_msgs/TrajectorySetpoint`    | Send position/velocity setpoints          |
-| `/fmu/in/vehicle_command`          | `px4_msgs/VehicleCommand`        | Send MAVLink commands (arm, mode changes) |
-| `/fmu/in/offboard_control_mode`    | `px4_msgs/OffboardControlMode`   | Enable offboard control heartbeat         |
-
-**Subscribe to a topic and print messages:**
-
-```bash
-ros2 topic echo /fmu/out/vehicle_local_position
-```
-
-**Check the publish rate of a topic:**
-
-```bash
-ros2 topic hz /fmu/out/vehicle_local_position
-```
-
-**Inspect the message type and field definitions:**
-
-```bash
-ros2 topic info /fmu/out/vehicle_local_position
-ros2 interface show px4_msgs/msg/VehicleLocalPosition
-```
-
-**View the node graph** (run outside the container, requires `rqt` installed on the host):
-
-```bash
-rqt_graph
-```
-
-Or inside the container:
-
-```bash
-ros2 run rqt_graph rqt_graph
-```
-
----
-
-## Build the ROS 2 Workspace
-
-This only needs to be done the first time, or whenever you add new packages.
-
-Open a shell inside the running container:
-
-```bash
-docker exec -it drone_ros bash
-```
-
-Then build the workspace:
-
-```bash
-source /opt/ros/jazzy/setup.bash
-cd /drone_sim/ros2_ws
-colcon build --symlink-install
-source install/setup.bash
-```
-
----
-
-## Repository Structure
-
-```
-Simulation/
-├── docker-compose.dev.yml      # main compose file
-├── .env                        # local config (gitignored, copy from .env.example)
-├── .env.example                # template
-│
-├── docker/
-│   ├── Dockerfile.dev          # container image definition
-│   └── entrypoint.sh           # ROS 2 environment setup at container start
-│
-├── worlds/
-│   └── outdoor_field.sdf       # Gazebo world with landing pad and obstacles
-│
-├── models/
-│   ├── huntsman/               # generated from the CAD: model.sdf, model.config, meshes/
-│   └── widow/
-│
-├── config/
-│   ├── airframes/              # generated PX4 airframe files (hexa X), one per drone
-│   ├── ros_gz_bridge.yaml      # gz <-> ROS 2 topic bridge configuration
-│   └── simulation_launch.py    # starts the bridge for the drone in DRONE
-│
-├── tools/
-│   └── cad_to_sdf.py           # builds models/ and config/airframes/ from the CAD
-│
-└── ros2_ws/
-    └── src/                    # your ROS 2 packages go here
-```
-
-The `ros2_ws/build/`, `ros2_ws/install/`, and `ros2_ws/log/` directories are generated by `colcon` and can be safely deleted. They will be recreated on the next build.
-
----
-
-## Troubleshooting
-
-**`could not select device driver "nvidia"`**
-Remove the `deploy.resources` GPU block from your compose file. This setup uses Mesa software rendering and does not need an Nvidia GPU.
-
-**`Authorization required` / `could not connect to display`**
-Redo the X11 display setup for your platform. Make sure `$DISPLAY` is set and the `xauth list` verification step shows at least one entry.
-
-**`/tmp/.docker.xauth: no such file or directory`**
-Run `touch /tmp/.docker.xauth` before the `xauth nmerge` command.
-
-**`xauth nlist` produces no output / auth file is empty**
-`$DISPLAY` was not set when you ran the xauth commands. Set it with `export DISPLAY=:0` and repeat the entire X11 setup block.
-
-**Gazebo opens but is very slow**
-Expected on a VM without GPU acceleration. The renderer falls back to llvmpipe (software). Lower world complexity or reduce the render resolution in `worlds/outdoor_field.sdf`.
-
-**`colcon build` fails inside the container**
-Confirm the workspace is mounted correctly: `ls /drone_sim/ros2_ws/src` should list your packages. If the directory is empty, check the volume mounts in `docker-compose.dev.yml`.
-
-**`ros2: executable file not found in $PATH`**
-Always source ROS before running ros2 commands via `docker exec`:
-```bash
-docker exec drone_ros bash -c "source /opt/ros/jazzy/setup.bash && ros2 topic list"
-```
-
-**`commander: command not found` in bash**
-`commander` is an internal PX4 module, not a Linux binary. Use `./bin/px4-commander` from inside `/px4/build/px4_sitl_default/`, or use QGroundControl.
-
-**Sensors show as missing in PX4 (`Preflight Fail: Accel Sensor 0 missing`)**
-The world SDF is missing the sensor system plugins (`gz-sim-imu-system`, `gz-sim-air-pressure-system`, `gz-sim-navsat-system`). Verify they are present in `worlds/outdoor_field.sdf`.
-
-**QGroundControl does not connect**
-Make sure the simulation is fully started (`Ready for takeoff!` visible in logs) before launching QGroundControl. PX4 SITL listens on UDP port 14550. If auto-detect fails, add a manual UDP comm link to port 14550 in QGroundControl settings.
-
-**`/lidar/points` topic not appearing**
-Check that `worlds/outdoor_field.sdf` contains the `gz-sim-sensors-system` plugin with `<render_engine>ogre2</render_engine>`. The lidar sensor is rendered by the sensors system — it does not need a separate plugin.
-
-**PX4 exits immediately after Gazebo starts**
-The `sleep 20` in the px4 service is not long enough for your machine. Increase it to `sleep 30` in `docker-compose.dev.yml` and recreate the containers:
-```bash
-docker compose -f docker-compose.dev.yml down
-docker compose -f docker-compose.dev.yml up --force-recreate
+docker-compose.dev.yml   three containers: Gazebo (drone_sim_dev), PX4 (drone_px4), ROS 2 bridge (drone_ros)
+docker/                  the image: ROS 2 Jazzy, Gazebo Harmonic, PX4 v1.15.0
+models/                  widow and huntsman, generated from the CAD
+config/airframes/        the PX4 airframe for each drone, generated
+config/                  which Gazebo topics go to ROS 2
+worlds/outdoor_field.sdf the field: landing pad, two crates, a pole, two trees, light wind
+tools/cad_to_sdf.py      CAD to models
+tools/hover_test.sh      takeoff, hover, land, PASS or FAIL
 ```
