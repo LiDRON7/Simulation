@@ -18,6 +18,10 @@ services:
       - GALLIUM_DRIVER=llvmpipe
       - MESA_LOADER_DRIVER_OVERRIDE=swrast
       - GZ_IP=127.0.0.1
+      # .env: HEADLESS=1 runs without the Gazebo window (no X11 needed).
+      # SENSORS=off drops camera and LiDAR rendering, for machines with no GPU.
+      - HEADLESS=${HEADLESS:-}
+      - SENSORS=${SENSORS:-on}
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
@@ -26,7 +30,9 @@ services:
       - ./config:/drone_sim/config
     command: >
       bash -c "
-        gz sim /drone_sim/worlds/outdoor_field.sdf --headless-rendering -r
+        cp /drone_sim/worlds/outdoor_field.sdf /tmp/world.sdf &&
+        if [ $$SENSORS = off ]; then sed -i '/gz-sim-sensors-system/,/<\\/plugin>/d' /tmp/world.sdf; fi &&
+        gz sim /tmp/world.sdf --headless-rendering -r $${HEADLESS:+-s}
       "
 
   px4:
@@ -57,7 +63,7 @@ services:
         sleep 20 &&
         source /opt/ros/jazzy/setup.bash &&
         cd /px4/build/px4_sitl_default &&
-        ./bin/px4 -s etc/init.d-posix/rcS
+        ./bin/px4 -d -s etc/init.d-posix/rcS
       "
 
   ros:
