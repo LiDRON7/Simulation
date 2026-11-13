@@ -51,10 +51,8 @@ Set `DRONE=huntsman` or `DRONE=widow` in `.env`, then restart.
 | `huntsman` (default) | `widow` |
 |---|---|
 | ![Huntsman in the simulator](docs/img/huntsman.png) | ![Widow in the simulator](docs/img/widow.png) |
-| Tarot 680 PRO, 4.46 kg | Storm Drone 6 V3, 2.00 kg |
+| Tarot 680 PRO, 4.26 kg | Storm Drone 6 V3, 1.88 kg |
 | OAK-D Pro camera and a Velodyne Puck LITE on its side | OAK-D Pro camera, no LiDAR |
-
-Both wear their rain covers, as in the CAD.
 
 ## Fly it by hand
 
@@ -217,8 +215,8 @@ With a GPU, set `GPU_VENDOR` in `.env`. I have not run this branch on a GPU mach
    ```
 
    ```
-   widow: 1996 g, inertia [0.0224, 0.0218, 0.0311] kg m2, hover throttle 0.59, thrust/weight 2.45 (EST), camera at [0.083, 0.001, -0.047], no lidar, skids 0.223 m under the centre of mass
-   huntsman: 4462 g, inertia [0.1024, 0.1075, 0.1912] kg m2, hover throttle 0.58, thrust/weight 2.55 (EST), camera at [0.134, 0.0, -0.037], lidar at [0.044, -0.002, -0.072], skids 0.211 m under the centre of mass
+   widow: 1878 g, inertia [0.0244, 0.0238, 0.0303] kg m2, hover throttle 0.57, thrust/weight 2.61 (EST), camera at [0.083, 0.001, -0.048], no lidar, skids 0.224 m under the centre of mass
+   huntsman: 4256 g, inertia [0.1023, 0.1071, 0.1872] kg m2, hover throttle 0.56, thrust/weight 2.67 (EST), camera at [0.134, 0.001, -0.037], lidar at [0.043, -0.001, -0.071], skids 0.211 m under the centre of mass
    ```
 
 3. Run `tools/hover_test.sh` for each drone.
