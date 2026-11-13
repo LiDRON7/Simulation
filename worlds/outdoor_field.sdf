@@ -21,6 +21,16 @@
       <real_time_factor>1.0</real_time_factor>
     </physics>
 
+    <!-- Where the field is on Earth (UPRM, Mayaguez). Without this the simulated GPS reports a fixed altitude
+         and PX4's height estimate lags far behind the real climb. -->
+    <spherical_coordinates>
+      <surface_model>EARTH_WGS84</surface_model>
+      <world_frame_orientation>ENU</world_frame_orientation>
+      <latitude_deg>18.2110</latitude_deg>
+      <longitude_deg>-67.1409</longitude_deg>
+      <elevation>0</elevation>
+    </spherical_coordinates>
+
     <!-- ═══════════════════════ PLUGINS ═══════════════════════════════ -->
     <plugin filename="gz-sim-physics-system"
             name="gz::sim::systems::Physics"/>
