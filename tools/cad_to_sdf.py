@@ -9,7 +9,7 @@ where it sits, the rotors, the sensors, the skids). Writes models/<drone>/ and c
 Rerun it after any CAD change; don't edit the generated files by hand.
 
 --mesh also rebuilds models/<drone>/meshes/<drone>.stl from the CAD's full-drone STL, thinned to MESH_FACES
-(needs: pip install numpy fast-simplification). Without it the mesh already in the repo is kept. Huntsman's full-drone
+(needs: pip install numpy scipy fast-simplification). Without it the mesh already in the repo is kept. Huntsman's full-drone
 STL is too big to keep in the CAD repo (35 MB): export it from Fusion (File > Export, STL, low refinement) and pass
 it with --stl huntsman=<file>.
 
@@ -24,7 +24,7 @@ import argparse, json, math, os, struct
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 G = 9.81
-MESH_FACES = 40000
+MESH_FACES = 100000
 # max_rad_s: top loaded motor speed = KV x full battery volts x 0.8. max_thrust_n: EST from prop size, per motor.
 # moment: torque per newton of thrust (m), EST, scaled from the x500's 0.016 for a 13 in prop.
 MOTORS = {
@@ -273,15 +273,29 @@ param set-default EKF2_IMU_POS_Z {-d['imu'][2]:.3f}
     return out, hover
 
 
-def thin_mesh(src, dst):     # binary STL in, thinned binary STL out
+def thin_mesh(src, dst, prop_d):     # binary STL in, thinned binary STL out
     import numpy as np, fast_simplification
+    from scipy.sparse import coo_matrix
+    from scipy.sparse.csgraph import connected_components
     raw = open(src, 'rb').read(); n = struct.unpack_from('<I', raw, 80)[0]
     assert len(raw) == 84 + 50 * n, 'not a binary STL'
     facet = np.dtype([('n', '<f4', 3), ('v', '<f4', (3, 3)), ('a', '<u2')])
     tri = np.frombuffer(raw, dtype=facet, count=n, offset=84)['v']
     pts, idx = np.unique(tri.reshape(-1, 3), axis=0, return_inverse=True)
-    v, f = fast_simplification.simplify(pts.astype(np.float32), idx.reshape(-1, 3).astype(np.int32), target_count=MESH_FACES)
-    out = np.zeros(len(f), dtype=facet); out['v'] = v[f]
+    f = idx.reshape(-1, 3)
+    # The CAD draws each spinning prop as a solid disc, which hides the drone. Drop those: the model has its own
+    # see-through rotor discs. A prop disc is a separate part, as wide as the prop both ways, and flat.
+    links = coo_matrix((np.ones(2 * len(f)), (np.r_[f[:, 0], f[:, 1]], np.r_[f[:, 1], f[:, 2]])), shape=(len(pts),) * 2)
+    part = connected_components(links, directed=False)[1][f[:, 0]]
+    keep = np.ones(len(f), bool)
+    for c in np.unique(part):
+        size = np.ptp(pts[np.unique(f[part == c])], axis=0)
+        if abs(size[0] - prop_d) < 0.05 * prop_d and abs(size[1] - prop_d) < 0.05 * prop_d and size[2] < 0.1 * prop_d:
+            keep[part == c] = False
+    f = f[keep]
+    if len(f) > MESH_FACES:
+        pts, f = fast_simplification.simplify(pts.astype(np.float32), f.astype(np.int32), target_count=MESH_FACES)
+    out = np.zeros(len(f), dtype=facet); out['v'] = pts[f]
     with open(dst, 'wb') as fh:
         fh.write(b'LiDRON'.ljust(80, b' ') + struct.pack('<I', len(f))); fh.write(out.tobytes())
     return n, len(f)
@@ -301,7 +315,7 @@ if __name__ == '__main__':
         mesh = os.path.join(mdir, 'meshes', f'{drone}.stl')
         if a.mesh:
             src = stl.get(drone) or os.path.join(a.cad, drone.capitalize(), 'Full Drone', f'{drone}-full-drone.stl')
-            print(f'{drone}: mesh %d -> %d faces' % thin_mesh(src, mesh))
+            print(f'{drone}: mesh %d -> %d faces' % thin_mesh(src, mesh, d['prop_r'] * 2000))
         open(os.path.join(mdir, 'model.sdf'), 'w').write(sdf(d, os.path.exists(mesh)))
         open(os.path.join(mdir, 'model.config'), 'w').write(f'''<?xml version="1.0"?>
 <model>
