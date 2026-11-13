@@ -3,10 +3,6 @@ set -e
 
 source /opt/ros/jazzy/setup.bash
 
-if [ -f /drone_sim/ros2_ws/install/setup.bash ]; then
-  source /drone_sim/ros2_ws/install/setup.bash
-fi
-
 export GZ_SIM_RESOURCE_PATH=/drone_sim/models:/drone_sim/worlds:/px4/Tools/simulation/gz/models:$GZ_SIM_RESOURCE_PATH
 export GZ_CONFIG_PATH=/opt/ros/jazzy/opt/gz_sim_vendor/share/gz:/opt/ros/jazzy/opt/gz_transport_vendor/share/gz
 

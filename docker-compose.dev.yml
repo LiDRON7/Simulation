@@ -24,7 +24,6 @@ services:
       - ./models:/drone_sim/models
       - ./worlds:/drone_sim/worlds
       - ./config:/drone_sim/config
-      - ./ros2_ws:/drone_sim/ros2_ws
     command: >
       bash -c "
         gz sim /drone_sim/worlds/outdoor_field.sdf --headless-rendering -r
@@ -77,7 +76,6 @@ services:
       - ./models:/drone_sim/models
       - ./worlds:/drone_sim/worlds
       - ./config:/drone_sim/config
-      - ./ros2_ws:/drone_sim/ros2_ws
     command: >
       bash -c "
         sleep 30 &&
