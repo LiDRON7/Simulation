@@ -2,14 +2,16 @@
 """Build the Gazebo models and PX4 airframe files for Widow and Huntsman from the CAD.
 
     python3 tools/cad_to_sdf.py                 # both drones, CAD repo next to this one
-    python3 tools/cad_to_sdf.py --cad "/path/to/Drone-Construction/3D Models" --mesh
+    python3 tools/cad_to_sdf.py --cad "/path/to/Drone-Construction/3D Models" --mesh --stl huntsman=/tmp/huntsman.stl
 
 Reads <cad>/<Drone>/Full Drone/<drone>-checks.json, which the Fusion full-drone scripts write (every weight and
 where it sits, the rotors, the sensors, the skids). Writes models/<drone>/ and config/airframes/<id>_gz_<drone>.
 Rerun it after any CAD change; don't edit the generated files by hand.
 
 --mesh also rebuilds models/<drone>/meshes/<drone>.stl from the CAD's full-drone STL, thinned to MESH_FACES
-(needs: pip install numpy fast-simplification). Without it the mesh already in the repo is kept.
+(needs: pip install numpy fast-simplification). Without it the mesh already in the repo is kept. Huntsman's full-drone
+STL is too big to keep in the CAD repo (35 MB): export it from Fusion (File > Export, STL, low refinement) and pass
+it with --stl huntsman=<file>.
 
 What is real and what is a guess:
   from the CAD     weight, centre of mass, rotor and sensor positions, skids, the look
@@ -289,14 +291,16 @@ if __name__ == '__main__':
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--cad', default=os.path.join(REPO, '..', 'Drone-Construction', '3D Models'))
     ap.add_argument('--mesh', action='store_true', help='rebuild the look from the CAD full-drone STL')
+    ap.add_argument('--stl', action='append', default=[], metavar='DRONE=FILE', help='full-drone STL to use instead of the CAD repo\'s')
     a = ap.parse_args()
+    stl = dict(x.split('=', 1) for x in a.stl)
     os.makedirs(os.path.join(REPO, 'config', 'airframes'), exist_ok=True)
     for drone in MOTORS:
         d = load(a.cad, drone)
         mdir = os.path.join(REPO, 'models', drone); os.makedirs(os.path.join(mdir, 'meshes'), exist_ok=True)
         mesh = os.path.join(mdir, 'meshes', f'{drone}.stl')
         if a.mesh:
-            src = os.path.join(a.cad, drone.capitalize(), 'Full Drone', f'{drone}-full-drone.stl')
+            src = stl.get(drone) or os.path.join(a.cad, drone.capitalize(), 'Full Drone', f'{drone}-full-drone.stl')
             print(f'{drone}: mesh %d -> %d faces' % thin_mesh(src, mesh))
         open(os.path.join(mdir, 'model.sdf'), 'w').write(sdf(d, os.path.exists(mesh)))
         open(os.path.join(mdir, 'model.config'), 'w').write(f'''<?xml version="1.0"?>

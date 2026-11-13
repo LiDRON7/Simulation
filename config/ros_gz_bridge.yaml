@@ -1,4 +1,5 @@
-# ROS 2 <-> Gazebo topic bridge
+# ROS 2 <-> Gazebo topic bridge. DRONE is replaced by simulation_launch.py with the drone being flown (widow or huntsman).
+# Widow has no LiDAR, so /lidar/points stays silent for it.
 
 - ros_topic_name: "/clock"
   gz_topic_name: "/clock"
@@ -37,19 +38,13 @@
   direction: GZ_TO_ROS
 
 - ros_topic_name: "/imu"
-  gz_topic_name: "/world/outdoor_field/model/x500_depth_0/link/base_link/sensor/imu_sensor/imu"
+  gz_topic_name: "/world/outdoor_field/model/DRONE_0/link/base_link/sensor/imu_sensor/imu"
   ros_type_name: "sensor_msgs/msg/Imu"
   gz_type_name: "gz.msgs.IMU"
   direction: GZ_TO_ROS
 
 - ros_topic_name: "/gps"
-  gz_topic_name: "/world/outdoor_field/model/x500_depth_0/link/base_link/sensor/navsat_sensor/navsat"
+  gz_topic_name: "/world/outdoor_field/model/DRONE_0/link/base_link/sensor/navsat_sensor/navsat"
   ros_type_name: "sensor_msgs/msg/NavSatFix"
   gz_type_name: "gz.msgs.NavSat"
-  direction: GZ_TO_ROS
-
-- ros_topic_name: "/model/x500_depth_0/odometry"
-  gz_topic_name: "/model/x500_depth_0/odometry"
-  ros_type_name: "nav_msgs/msg/Odometry"
-  gz_type_name: "gz.msgs.Odometry"
   direction: GZ_TO_ROS

@@ -12,6 +12,11 @@
       </inertial>
       <gravity>true</gravity>
       <velocity_decay/>
+      <visual name="body">
+        <pose>0.0023 0.0002 0.0340 0 0 0</pose>
+        <geometry><mesh><scale>0.001 0.001 0.001</scale><uri>model://huntsman/meshes/huntsman.stl</uri></mesh></geometry>
+        <material><ambient>0.25 0.25 0.27 1</ambient><diffuse>0.25 0.25 0.27 1</diffuse></material>
+      </visual>
       <collision name="body">
         <pose>0.0000 0.0000 0.0148 0 0 0</pose>
         <geometry><box><size>0.3106 0.3106 0.0600</size></box></geometry>
