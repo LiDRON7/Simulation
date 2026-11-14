@@ -18,7 +18,7 @@ PX4, Gazebo and ROS 2 in Docker, flying our two drones as they are drawn in the 
 
    | Your machine | Set in `.env` |
    |---|---|
-   | Linux desktop with a GPU | your `GPU_VENDOR`, then do the [window setup](#the-gazebo-window-linux-desktop) |
+   | Linux desktop with an NVIDIA GPU | install `nvidia-container-toolkit`, add `-f docker-compose.gpu.yml` after the main file, then do the [window setup](#the-gazebo-window-linux-desktop) |
    | No desktop, or you are on ssh | `HEADLESS=1` |
    | Laptop with no GPU, or a Mac with Docker Desktop | `HEADLESS=1`, and `SENSORS=off` if it runs too slowly |
 
@@ -178,6 +178,34 @@ Two things from these runs:
 - PX4 was told 5 m and believed it was there. Gazebo had Huntsman at 3.7 m above the pad and Widow at 4.7 m. Do not trust simulated height to better than a metre yet.
 - Widow sat on the ground for about ten minutes before PX4 disarmed it. Huntsman disarmed within seconds.
 
+## Test every way a mission can end
+
+`Autonomous-Systems/scripts/sim_scenarios.sh` flies the autonomy through this world and says PASS or FAIL for each
+case, checking positions against Gazebo's own (not PX4's). Start the stack first (`./scripts/simulation.sh up`), then:
+
+```bash
+./scripts/sim_scenarios.sh             # all of them
+./scripts/sim_scenarios.sh avoid abort # some
+```
+
+My run on 2026-11-13, Ubuntu + RTX 3060 Ti, both drones at the real 5 mph speed limit:
+
+| Scenario | What it checks | Huntsman | Widow |
+|---|---|---|---|
+| `a_to_b` | flies 7 m and lands | 0.60 m from the point | 0.34 m |
+| `avoid` | a tree in the way at 3 m | around it, 0.79 m clear | around it, 0.63 m clear |
+| `abort` | `/autonomy/abort` mid-flight | PX4 lands where it is | same |
+| `hold` | pause and resume | moved 0.12 m in 10 s, then landed 0.40 m from the point | 0.32 m, 0.37 m |
+| `takeover` | the pilot switches PX4 to Hold | autonomy stands down, refuses abort and enable | same |
+| `bad_landing` | sent onto a 1 m crate | LiDAR refuses it, lands 1.37 m from its centre | skipped: no LiDAR |
+| `timeout` | mission timeout | lands where it is | same |
+| `perception_crash` | perception node killed | HOLD, then lands | keeps flying on the depth map |
+| `autonomy_crash` | mission node killed | PX4 leaves Offboard, but drifts 15 m with no RC sticks | drifts 4.9 m |
+| `battery` | PX4 low battery failsafe | not shown: it only fired after touchdown | same |
+
+Huntsman's numbers come from a fresh simulator per scenario: in one long run PX4 lost the simulated compass, refused
+to arm, and every later scenario stopped at ABORT on the ground (the safe answer, but nothing tested).
+
 ## The Gazebo window (Linux desktop)
 
 Without `HEADLESS=1`, Gazebo opens its window on your screen. Docker needs permission for that, once after every reboot:
@@ -201,7 +229,8 @@ On my Mac (Docker Desktop, no GPU):
 | `HEADLESS=1`, `SENSORS=off` | passes for both drones | real time |
 | `HEADLESS=1` (sensors on) | passes for Huntsman | slower than real time: LiDAR about 3 scans a second and depth about 7 frames, against 10 and 30 |
 
-With a GPU, set `GPU_VENDOR` in `.env`. I have not run this branch on a GPU machine yet.
+On my Ubuntu PC (RTX 3060 Ti) with `-f docker-compose.gpu.yml`, sensors on: real time, both drones.
+`GPU_VENDOR` alone does nothing on its own: the container also needs the GPU, which is what the extra file gives it.
 
 ## After a CAD change
 
