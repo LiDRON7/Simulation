@@ -193,7 +193,7 @@ My run on 2026-11-13, Ubuntu + RTX 3060 Ti, both drones at the real 5 mph speed 
 | Scenario | What it checks | Huntsman | Widow |
 |---|---|---|---|
 | `a_to_b` | flies 7 m and lands | 0.60 m from the point | 0.34 m |
-| `avoid` | a tree in the way at 3 m | around it, 0.79 m clear | around it, 0.63 m clear |
+| `avoid` | a tree in the way at 3 m | around it in 6 of 7 runs (0.15 to 1.30 m clear); clipped it once | around it in 5 of 5 (0.63 to 1.10 m clear) |
 | `abort` | `/autonomy/abort` mid-flight | PX4 lands where it is | same |
 | `hold` | pause and resume | moved 0.12 m in 10 s, then landed 0.40 m from the point | 0.32 m, 0.37 m |
 | `takeover` | the pilot switches PX4 to Hold | autonomy stands down, refuses abort and enable | same |
