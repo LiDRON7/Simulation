@@ -68,6 +68,9 @@ param set-default SIM_GZ_EC_MAX5 802
 param set-default SIM_GZ_EC_MAX6 802
 
 param set-default MPC_THR_HOVER 0.56
+# Same speed limit as the real drones (Sensor-Control-Data-Gathering/docs/pi-setup.md, 5 mph). Without it PX4's
+# 12 m/s default had Widow pitch 45 deg toward a far waypoint, camera on the grass, and fly into a tree.
+param set-default MPC_XY_VEL_MAX 2.2352
 
 # where the Pixhawk sits from the centre of mass (forward, right, down), as in the drone's README
 param set-default EKF2_IMU_POS_X 0.002

@@ -266,6 +266,9 @@ param set-default CA_ROTOR{i}_KM {'0.05' if spin == 'ccw' else '-0.05'}
     out += '\n' + ''.join(f'param set-default SIM_GZ_EC_MAX{i + 1} {round(d["max_rad_s"])}\n' for i in range(6))
     out += f'''
 param set-default MPC_THR_HOVER {hover:.2f}
+# Same speed limit as the real drones (Sensor-Control-Data-Gathering/docs/pi-setup.md, 5 mph). Without it PX4's
+# 12 m/s default had Widow pitch 45 deg toward a far waypoint, camera on the grass, and fly into a tree.
+param set-default MPC_XY_VEL_MAX 2.2352
 
 # where the Pixhawk sits from the centre of mass (forward, right, down), as in the drone's README
 param set-default EKF2_IMU_POS_X {d['imu'][0]:.3f}
