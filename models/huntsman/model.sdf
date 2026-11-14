@@ -73,6 +73,8 @@
         <update_rate>30</update_rate>
       </sensor>
     </link>
+    <!-- The real OAK-D is mounted upside down; its driver turns every frame 180 deg, so this upright camera
+         gives the same images the autonomy gets on the drone (Sensor-Control-Data-Gathering, upside_down). -->
     <link name="camera_link">
       <pose relative_to="base_link">0.1340 0.0005 -0.0368 0 0.1745 0</pose>
       <inertial><mass>0.001</mass><inertia><ixx>1e-6</ixx><iyy>1e-6</iyy><izz>1e-6</izz></inertia></inertial>
