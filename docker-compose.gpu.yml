@@ -1,0 +1,12 @@
+# Linux + NVIDIA only: Gazebo renders the camera and LiDAR on the GPU instead of the CPU (llvmpipe).
+# Needs nvidia-container-toolkit. Add it after the main file:
+#   docker compose -f docker-compose.dev.yml -f docker-compose.gpu.yml up -d
+services:
+  drone-dev:
+    gpus: all
+    environment:
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - LIBGL_ALWAYS_SOFTWARE=0
+      - GALLIUM_DRIVER=
+      - MESA_LOADER_DRIVER_OVERRIDE=
+      - __GLX_VENDOR_LIBRARY_NAME=nvidia
