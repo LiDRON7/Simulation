@@ -269,6 +269,8 @@ param set-default MPC_THR_HOVER {hover:.2f}
 # Same speed limit as the real drones (Sensor-Control-Data-Gathering/docs/pi-setup.md, 5 mph). Without it PX4's
 # 12 m/s default had Widow pitch 45 deg toward a far waypoint, camera on the grass, and fly into a tree.
 param set-default MPC_XY_VEL_MAX 2.2352
+# Same offboard-loss action as the real Pixhawk (pi-setup.md): Land. The default, Position, drifts with no sticks (#125).
+param set-default COM_OBL_RC_ACT 4
 
 # where the Pixhawk sits from the centre of mass (forward, right, down), as in the drone's README
 param set-default EKF2_IMU_POS_X {d['imu'][0]:.3f}
