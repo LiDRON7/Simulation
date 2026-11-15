@@ -63,6 +63,19 @@ def minimap(ax, t):
     ax.set_title(f'{st}   PX4 height {h:.1f} m', color=COL.get(st, '#dddddd'), fontsize=11, weight='bold', loc='left')
 
 
+def ticks(files):
+    """(sim time, latest file at or before it) every 0.2 s, so the video runs at sim speed even if samples were skipped."""
+    times = [float(os.path.basename(f).split('_')[0].removesuffix('.npy')) for f in files]
+    if not files:
+        return []
+    out, i = [], 0
+    for t in np.arange(times[0], times[-1] + 1e-6, 0.2):
+        while i + 1 < len(times) and times[i + 1] <= t:
+            i += 1
+        out.append((float(t), files[i]))
+    return out
+
+
 def ffmpeg(*a):
     subprocess.run(['ffmpeg', '-v', 'error', '-y', *a], check=True)
 
@@ -136,8 +149,7 @@ def lidar_view(name, dst):
     tmp = tempfile.mkdtemp()
     fig = plt.figure(figsize=(12.8, 7.2), dpi=100)
     k = 0
-    for fpath in files:
-        t = float(os.path.basename(fpath)[:-4])
+    for t, fpath in ticks(files):
         enu, me, yaw = to_world(np.load(fpath).astype(np.float32), t, R_m, t_m)
         if enu is None:
             continue
@@ -159,7 +171,7 @@ def lidar_view(name, dst):
         dx, dy, dok, _ = project(me[None], eye, target)
         if dok[0]:
             ax.plot(dx, dy, 'o', ms=12, mfc='none', mec='#ffd43b', mew=2)
-        ax.text(20, 40, f'{drone} · LiDAR · {name} view · ground grey, anything taller coloured by height (blue 0.3 m to red 6 m)',
+        ax.text(20, 40, f'{drone} · sim {t:.1f} s · LiDAR · {name} view · ground grey, anything taller coloured by height (blue 0.3 m to red 6 m)',
                 color='#dddddd', fontsize=14)
         minimap(fig.add_axes([0.72, 0.42, 0.26, 0.5]), t)
         fig.savefig(f'{tmp}/{k:05d}.png', facecolor=fig.get_facecolor()); k += 1
@@ -175,8 +187,7 @@ def landing_view(dst):
     tmp = tempfile.mkdtemp()
     fig = plt.figure(figsize=(12.8, 7.2), dpi=100)
     lim = 5.0
-    for k, fg in enumerate(files):
-        t = float(os.path.basename(fg).split('_')[0])
+    for k, (t, fg) in enumerate(ticks(files)):
         g = np.load(fg).astype(np.float32).reshape(-1, 3)
         fo = fg.replace('_ground', '_obstacle')
         o = np.load(fo).astype(np.float32).reshape(-1, 3) if os.path.exists(fo) else np.zeros((0, 3))
@@ -204,8 +215,8 @@ def landing_view(dst):
         top.set_title('from above: footprint box, clearance circle', color='#dddddd')
         ok = v.get('suitable')
         verdict = ('SAFE TO LAND' if ok else 'NOT SAFE: ' + str(v.get('reason', '?'))) if v else 'no verdict yet'
-        fig.text(0.04, 0.93, f'{drone} · landing check', color='#dddddd', fontsize=14)
-        fig.text(0.30, 0.93, verdict, color='#40c057' if ok else '#fa5252', fontsize=15, weight='bold')
+        fig.text(0.04, 0.93, f'{drone} · landing check · sim {t:.1f} s', color='#dddddd', fontsize=14)
+        fig.text(0.40, 0.93, verdict, color='#40c057' if ok else '#fa5252', fontsize=15, weight='bold')
         if v:
             num = lambda k: v.get(k) if isinstance(v.get(k), (int, float)) else float('nan')
             fig.text(0.04, 0.03, f"points in footprint {v.get('point_count', '?')}   slope {num('slope_deg'):.1f} deg   "
@@ -221,8 +232,7 @@ def depth_view(dst):
     files = sorted(glob.glob(f'{rec}/depth/*.npy'), key=lambda p: float(os.path.basename(p)[:-4]))
     tmp = tempfile.mkdtemp()
     fig = plt.figure(figsize=(12.8, 7.2), dpi=100)
-    for k, fpath in enumerate(files):
-        t = float(os.path.basename(fpath)[:-4])
+    for k, (t, fpath) in enumerate(ticks(files)):
         d = np.load(fpath).astype(np.float32)
         d[~np.isfinite(d) | (d <= 0)] = np.nan
         h, w = d.shape
@@ -233,7 +243,7 @@ def depth_view(dst):
         im = ax.imshow(d, cmap='turbo_r', vmin=0.2, vmax=12); ax.axis('off')
         ax.add_patch(plt.Rectangle((w * 0.3, h * 0.3), w * 0.4, h * 0.4, fill=False, ec='white', lw=1.5, ls='--'))
         cb = fig.colorbar(im, ax=ax, fraction=0.03, pad=0.01); cb.ax.tick_params(colors='#aaaaaa'); cb.set_label('m', color='#aaaaaa')
-        fig.text(0.01, 0.95, f'{drone} · OAK-D depth · closest in the centre box: {close:.1f} m', color='#dddddd', fontsize=14)
+        fig.text(0.01, 0.95, f'{drone} · sim {t:.1f} s · OAK-D depth · closest in the centre box: {close:.1f} m', color='#dddddd', fontsize=14)
         minimap(fig.add_axes([0.73, 0.15, 0.25, 0.7]), t)
         fig.savefig(f'{tmp}/{k:05d}.png', facecolor=fig.get_facecolor())
     plt.close(fig)
