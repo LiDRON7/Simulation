@@ -1,6 +1,7 @@
 """render.py REC_DIR VIDEO_DIR OUT_DIR DRONE VIEWS
 Puts a minimap (obstacle map, A* path, start A, goal B, drone, state) on every camera video, and draws the views
-Gazebo can't film: 'depth' (the camera's depth image) and 'lidar-<chase|top|pad|tree|crate|wide>' (the LiDAR cloud)."""
+Gazebo can't film: 'depth' (the camera's depth image), 'lidar' (what the landing check sees under the drone: ground,
+obstacles, its footprint and its verdict) and 'lidar-<chase|top|pad|tree|crate|wide>' (the whole cloud from an angle)."""
 import bisect, glob, json, math, os, re, subprocess, sys, tempfile
 import numpy as np
 import matplotlib
@@ -12,7 +13,7 @@ from scene import FIXED, src as SIM
 rec, vids, out, drone, views = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5].split(',')
 os.makedirs(out, exist_ok=True)
 ev = [json.loads(l) for l in open(f'{rec}/log.jsonl') if l.strip()]
-S = {k: [(e['t'], e['d']) for e in ev if e['k'] == k] for k in ('grid', 'path', 'pos', 'att', 'state')}
+S = {k: [(e['t'], e['d']) for e in ev if e['k'] == k] for k in ('grid', 'path', 'pos', 'att', 'state', 'land')}
 T = {k: [x[0] for x in v] for k, v in S.items()}
 t_end = ev[-1]['t']
 # B: the destination the scenario sent (log.txt next to data/); else the end of the first planned path.
@@ -152,13 +153,66 @@ def lidar_view(name, dst):
         gxp, gyp, ok, _ = project(grid, eye, target)
         ax.scatter(gxp[ok], gyp[ok], s=1, c='#333333')
         x, y, ok, z = project(enu, eye, target)
-        ax.scatter(x[ok], y[ok], s=2, c=enu[ok, 2], cmap='turbo', vmin=-0.3, vmax=6, linewidths=0)
+        low = ok & (enu[:, 2] < 0.3)        # the ground, grey, so whatever stands on it stands out
+        ax.scatter(x[low], y[low], s=3, c='#555555', linewidths=0)
+        ax.scatter(x[ok & ~low], y[ok & ~low], s=7, c=enu[ok & ~low, 2], cmap='turbo', vmin=0.3, vmax=6, linewidths=0)
         dx, dy, dok, _ = project(me[None], eye, target)
         if dok[0]:
             ax.plot(dx, dy, 'o', ms=12, mfc='none', mec='#ffd43b', mew=2)
-        ax.text(20, 40, f'{drone} · LiDAR · {name} view · coloured by height (0 to 6 m)', color='#dddddd', fontsize=14)
+        ax.text(20, 40, f'{drone} · LiDAR · {name} view · ground grey, anything taller coloured by height (blue 0.3 m to red 6 m)',
+                color='#dddddd', fontsize=14)
         minimap(fig.add_axes([0.72, 0.42, 0.26, 0.5]), t)
         fig.savefig(f'{tmp}/{k:05d}.png', facecolor=fig.get_facecolor()); k += 1
+    plt.close(fig)
+    ffmpeg('-framerate', '5', '-i', f'{tmp}/%05d.png', '-vf', 'fps=10,format=yuv420p', '-c:v', 'libx264', '-crf', '20', dst)
+
+
+def landing_view(dst):
+    """What the landing check sees, in its own frame under the drone (x forward, y right, z down)."""
+    files = sorted(glob.glob(f'{rec}/landing/*_ground.npy'))
+    if not files:
+        print(f'lidar: no landing-check data ({drone} has no LiDAR?)'); return
+    tmp = tempfile.mkdtemp()
+    fig = plt.figure(figsize=(12.8, 7.2), dpi=100)
+    lim = 5.0
+    for k, fg in enumerate(files):
+        t = float(os.path.basename(fg).split('_')[0])
+        g = np.load(fg).astype(np.float32).reshape(-1, 3)
+        fo = fg.replace('_ground', '_obstacle')
+        o = np.load(fo).astype(np.float32).reshape(-1, 3) if os.path.exists(fo) else np.zeros((0, 3))
+        v = at('land', t) or {}
+        fig.clear(); fig.patch.set_facecolor('#0d0d0d')
+        side = fig.add_axes([0.04, 0.1, 0.36, 0.72]); top = fig.add_axes([0.44, 0.1, 0.3, 0.72])
+        for ax in (side, top):
+            ax.set_facecolor('#161616'); ax.grid(color='#2a2a2a'); ax.tick_params(colors='#888888')
+            for sp in ax.spines.values(): sp.set_color('#444444')
+        half = 0.6   # simulation.yaml: landing.footprint_m 1.2, landing.clearance_m 0.75
+        # side: forward (x) against depth below the drone (z down)
+        side.scatter(g[:, 0], g[:, 2], s=4, c='#40c057', label=f'ground ({len(g)})')
+        side.scatter(o[:, 0], o[:, 2], s=6, c='#fa5252', label=f'not ground ({len(o)})')
+        side.plot([0], [0], marker='v', ms=14, color='#ffd43b'); side.text(0.15, -0.25, 'LiDAR', color='#ffd43b')
+        side.axvspan(-half, half, color='#ffd43b', alpha=0.08)
+        side.set_xlim(-lim, lim); side.set_ylim(8, -1); side.set_xlabel('forward (m)', color='#aaaaaa')
+        side.set_ylabel('below the drone (m)', color='#aaaaaa'); side.set_title('side view', color='#dddddd')
+        side.legend(loc='lower left', fontsize=9, facecolor='#222222', labelcolor='#dddddd')
+        # top: forward up, right to the right
+        top.scatter(g[:, 1], g[:, 0], s=4, c='#40c057'); top.scatter(o[:, 1], o[:, 0], s=6, c='#fa5252')
+        top.add_patch(plt.Rectangle((-half, -half), 2 * half, 2 * half, fill=False, ec='#ffd43b', lw=2))
+        top.add_patch(plt.Circle((0, 0), 0.75, fill=False, ec='#ffd43b', lw=1, ls='--'))
+        top.set_xlim(-lim, lim); top.set_ylim(-lim, lim); top.set_aspect('equal')
+        top.set_xlabel('right (m)', color='#aaaaaa'); top.set_ylabel('forward (m)', color='#aaaaaa')
+        top.set_title('from above: footprint box, clearance circle', color='#dddddd')
+        ok = v.get('suitable')
+        verdict = ('SAFE TO LAND' if ok else 'NOT SAFE: ' + str(v.get('reason', '?'))) if v else 'no verdict yet'
+        fig.text(0.04, 0.93, f'{drone} · landing check', color='#dddddd', fontsize=14)
+        fig.text(0.30, 0.93, verdict, color='#40c057' if ok else '#fa5252', fontsize=15, weight='bold')
+        if v:
+            num = lambda k: v.get(k) if isinstance(v.get(k), (int, float)) else float('nan')
+            fig.text(0.04, 0.03, f"points in footprint {v.get('point_count', '?')}   slope {num('slope_deg'):.1f} deg   "
+                     f"roughness {100 * num('roughness_m'):.1f} cm   clear radius {num('clear_radius_m'):.2f} m",
+                     color='#aaaaaa', fontsize=11)
+        minimap(fig.add_axes([0.77, 0.15, 0.21, 0.62]), t)
+        fig.savefig(f'{tmp}/{k:05d}.png', facecolor=fig.get_facecolor())
     plt.close(fig)
     ffmpeg('-framerate', '5', '-i', f'{tmp}/%05d.png', '-vf', 'fps=10,format=yuv420p', '-c:v', 'libx264', '-crf', '20', dst)
 
@@ -190,6 +244,8 @@ def depth_view(dst):
 for v in views:
     if v == 'depth':
         depth_view(f'{out}/depth.mp4')
+    elif v == 'lidar':
+        landing_view(f'{out}/lidar.mp4')
     elif v.startswith('lidar-'):
         lidar_view(v[6:], f'{out}/{v}.mp4')
     elif os.path.exists(f'{vids}/{v}.mp4'):
