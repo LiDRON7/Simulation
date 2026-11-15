@@ -60,7 +60,7 @@ def minimap(ax, t):
         s.set_color('#444444')
     st = at('state', t) or ''
     h = -trail[-1][2] if trail else 0.0
-    ax.set_title(f'{st}   {h:.1f} m up', color=COL.get(st, '#dddddd'), fontsize=11, weight='bold', loc='left')
+    ax.set_title(f'{st}   PX4 height {h:.1f} m', color=COL.get(st, '#dddddd'), fontsize=11, weight='bold', loc='left')
 
 
 def ffmpeg(*a):
@@ -209,7 +209,7 @@ def landing_view(dst):
         if v:
             num = lambda k: v.get(k) if isinstance(v.get(k), (int, float)) else float('nan')
             fig.text(0.04, 0.03, f"points in footprint {v.get('point_count', '?')}   slope {num('slope_deg'):.1f} deg   "
-                     f"roughness {100 * num('roughness_m'):.1f} cm   clear radius {num('clear_radius_m'):.2f} m",
+                     f"roughness {100 * num('roughness_m'):.1f} cm   " + (f"nearest obstacle {num('clear_radius_m'):.2f} m" if num('clear_radius_m') >= 0 else 'no obstacle near'),
                      color='#aaaaaa', fontsize=11)
         minimap(fig.add_axes([0.77, 0.15, 0.21, 0.62]), t)
         fig.savefig(f'{tmp}/{k:05d}.png', facecolor=fig.get_facecolor())
