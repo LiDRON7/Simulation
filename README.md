@@ -206,6 +206,46 @@ My run on 2026-11-13, Ubuntu + RTX 3060 Ti, both drones at the real 5 mph speed 
 Huntsman's numbers come from a fresh simulator per scenario: in one long run PX4 lost the simulated compass, refused
 to arm, and every later scenario stopped at ABORT on the ground (the safe answer, but nothing tested).
 
+## Record a scenario
+
+`tools/record.sh` flies any of the scenarios above and turns it into videos you can watch or post on an issue. Every
+video gets a minimap in the corner: the obstacle map (grey), the A* path the drone is following (blue), the start A,
+the goal B, the drone and its trail, and the mission state.
+
+1. Start nothing by hand. The script starts the simulator and the autonomy, flies, and shuts them down.
+2. Pick the drone, the views and one or more scenarios:
+
+   ```bash
+   tools/record.sh huntsman chase,onboard,depth,lidar avoid
+   tools/record.sh widow chase,tree takeover a_to_b     # both in one sim, one after the other
+   ```
+
+3. Wait for `videos in recordings/...`. That folder has one `.mp4` per view, `log.txt` with the PASS/FAIL lines,
+   and `data/` with the raw recording.
+
+| View | What you see |
+| --- | --- |
+| `chase` | a camera following behind the drone |
+| `onboard` | what the drone's own camera sees |
+| `pad`, `tree`, `crate`, `wide` | fixed cameras at those spots in the field |
+| `depth` | the OAK-D depth image, coloured by distance, with the box the obstacle check looks in |
+| `lidar` | what the landing check sees under the drone: ground in green, everything else in red, the footprint it judges, and its verdict (Huntsman only). Start here when a landing goes wrong |
+| `lidar-chase`, `lidar-top`, `lidar-pad`, ... | the whole LiDAR cloud from that angle: ground grey, anything taller coloured by height (Huntsman only) |
+
+| | |
+| --- | --- |
+| ![chase view with the minimap](docs/img/record-chase.png) | `chase`: Huntsman flying around the tree. The minimap shows the tree in the obstacle map, the A* path in blue, the start A and the goal B. |
+| ![onboard view on the pad](docs/img/record-onboard.png) | `onboard`: Widow on the pad. The two crates are already in the map; the grass is not. |
+| ![depth view](docs/img/record-depth.png) | `depth`: what the OAK-D measures, coloured by distance. The dashed box is where the obstacle check looks; Huntsman's own prop guards show at the top. |
+| ![landing check view](docs/img/record-lidar.png) | `lidar`: Huntsman over the crate. The side view shows the lid 4.3 m down and the real ground a metre below it, so the check says NOT SAFE and it lands next to the crate. |
+| ![lidar cloud from the crate camera](docs/img/record-lidar-crate.png) | `lidar-crate`: the whole LiDAR scan seen from the crate camera. The crate lid stands out in blue, with its shadow behind it. |
+
+It needs Docker and ffmpeg. The depth, LiDAR and minimap drawings use [uv](https://docs.astral.sh/uv), which fetches
+numpy and matplotlib by itself; without uv the script tells you the one command to run on a machine that has it.
+It runs in real time only on Linux with an NVIDIA GPU. On a Mac it works, but the camera and LiDAR are drawn in
+software (about 0.16x real time on my Mac with sensors on), so expect a one-minute scenario to take a good while. If you only have a Mac, ask for a run on the lab's GPU
+machine instead.
+
 ## The Gazebo window (Linux desktop)
 
 Without `HEADLESS=1`, Gazebo opens its window on your screen. Docker needs permission for that, once after every reboot:
