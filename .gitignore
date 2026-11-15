@@ -36,3 +36,7 @@ logs/
 
 # Gazebo cache
 ~/.gz/
+
+# tools/record.sh
+.record/
+recordings/
