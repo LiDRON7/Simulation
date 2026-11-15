@@ -42,7 +42,10 @@ export AUTONOMY_ROOT=$autonomy SIMULATION_ROOT=$work/sim DRONE=$drone HEADLESS=1
 C=(docker compose --project-directory "$work/sim" -f "$work/sim/docker-compose.dev.yml"
    -f "$autonomy/integration/compose.autonomy.yml" -f "$work/frames.yml")
 docker info 2>/dev/null | grep -q "Runtimes:.*nvidia" && C+=(-f "$work/sim/docker-compose.gpu.yml")
-"${C[@]}" down >/dev/null 2>&1; "${C[@]}" up -d 2>&1 | tail -1
+# The containers have fixed names: clear any left by another run (the plain sim, or a recording that was stopped).
+docker rm -f lidron_autonomy drone_px4 drone_sim_dev drone_ros lidron_dds_agent >/dev/null 2>&1
+trap '"${C[@]}" down >/dev/null 2>&1' EXIT
+"${C[@]}" up -d 2>&1 | tail -1
 for _ in $(seq 100); do docker exec lidron_autonomy test -f /autonomy/install/setup.bash 2>/dev/null && break; sleep 3; done
 docker cp "$here/record/rec.py" lidron_autonomy:/tmp/rec.py
 docker exec -d lidron_autonomy bash -c "source /autonomy/install/setup.bash && exec python3 /tmp/rec.py /tmp/rec"
