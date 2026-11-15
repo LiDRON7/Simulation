@@ -1,6 +1,7 @@
 """Runs inside lidron_autonomy while a scenario is recorded (record.sh copies it in).
 python3 rec.py OUT_DIR: OUT_DIR/log.jsonl has grid, path, position, attitude and state with sim time;
-OUT_DIR/depth/<t>.npy and OUT_DIR/lidar/<t>.npy hold the camera depth and the LiDAR cloud at 5 Hz. Stop with SIGTERM."""
+OUT_DIR/depth/<t>.npy and OUT_DIR/lidar/<t>.npy hold the camera depth and the LiDAR cloud at 5 Hz, and
+OUT_DIR/landing/<t>_{ground,obstacle}.npy what the landing check took as ground and as obstacles. Stop with SIGTERM."""
 import json, os, signal, sys
 import numpy as np
 import rclpy
@@ -14,7 +15,7 @@ from sensor_msgs_py import point_cloud2
 from px4_msgs.msg import VehicleAttitude, VehicleLocalPosition
 
 out = sys.argv[1]
-for d in ('depth', 'lidar'):
+for d in ('depth', 'lidar', 'landing'):
     os.makedirs(f'{out}/{d}', exist_ok=True)
 
 
@@ -32,6 +33,9 @@ class Rec(Node):
         self.create_subscription(VehicleAttitude, '/fmu/out/vehicle_attitude', self.att, px4)
         self.create_subscription(Image, '/oakd/depth/image', self.depth, 2)
         self.create_subscription(PointCloud2, '/lidar/points', self.lidar, 2)
+        self.create_subscription(String, '/landing/assessment', self.verdict, 10)
+        self.create_subscription(PointCloud2, '/landing/ground_points', lambda m: self.landing(m, 'ground'), 2)
+        self.create_subscription(PointCloud2, '/landing/non_ground_points', lambda m: self.landing(m, 'obstacle'), 2)
 
     def t(self):
         return self.get_clock().now().nanoseconds / 1e9
@@ -82,6 +86,17 @@ class Rec(Node):
             p = point_cloud2.read_points_numpy(m, field_names=('x', 'y', 'z'))
             p = p[np.isfinite(p).all(axis=1)]
             np.save(f'{out}/lidar/{t:.3f}.npy', p.astype(np.float16))
+
+
+    def verdict(self, m):
+        if self.due('verdict', 0.2) is not None:
+            self.w('land', json.loads(m.data))
+
+    def landing(self, m, kind):
+        t = self.due('landing_' + kind, 0.2)
+        if t is not None:
+            p = point_cloud2.read_points_numpy(m, field_names=('x', 'y', 'z')) if m.width * m.height else np.zeros((0, 3))
+            np.save(f'{out}/landing/{t:.3f}_{kind}.npy', p.astype(np.float16))
 
 
 rclpy.init()
