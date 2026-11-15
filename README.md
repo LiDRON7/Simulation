@@ -188,23 +188,26 @@ case, checking positions against Gazebo's own (not PX4's). Start the stack first
 ./scripts/sim_scenarios.sh avoid abort # some
 ```
 
-My run on 2026-11-13, Ubuntu + RTX 3060 Ti, both drones at the real 5 mph speed limit:
+My run on 2026-11-15 on the final Milestone 3 code, Ubuntu + RTX 3060 Ti, both drones at the real 5 mph speed limit,
+a fresh simulator for every scenario:
 
 | Scenario | What it checks | Huntsman | Widow |
 |---|---|---|---|
-| `a_to_b` | flies 7 m and lands | 0.60 m from the point | 0.34 m |
-| `avoid` | a tree in the way at 3 m | around it in 6 of 7 runs (0.15 to 1.30 m clear); clipped it once | around it in 5 of 5 (0.63 to 1.10 m clear) |
+| `a_to_b` | flies 7 m and lands | 0.37 m from the point | 0.18 m |
+| `avoid` | a tree in the way at 3 m | around it in 6 of 6 runs, 0.39 to 1.03 m clear | 4 of 4, 0.71 to 0.93 m clear |
 | `abort` | `/autonomy/abort` mid-flight | PX4 lands where it is | same |
-| `hold` | pause and resume | moved 0.12 m in 10 s, then landed 0.40 m from the point | 0.32 m, 0.37 m |
+| `hold` | pause and resume | moved 0.17 m in 10 s, then landed 0.57 m from the point | 0.01 m, 0.33 m |
 | `takeover` | the pilot switches PX4 to Hold | autonomy stands down, refuses abort and enable | same |
-| `bad_landing` | sent onto a 1 m crate | LiDAR refuses it, lands 1.37 m from its centre | skipped: no LiDAR |
+| `bad_landing` | sent onto a 1 m crate | LiDAR refuses it, lands 1.58 m from its centre | skipped: no LiDAR |
 | `timeout` | mission timeout | lands where it is | same |
-| `perception_crash` | perception node killed | HOLD, then lands | keeps flying on the depth map |
-| `autonomy_crash` | mission node killed | PX4 leaves Offboard, but drifts 15 m with no RC sticks | drifts 4.9 m |
-| `battery` | PX4 low battery failsafe | not shown: it only fired after touchdown | same |
+| `battery` | PX4 low battery failsafe | takes over in the air at 5 m, autonomy stands down | same |
+| `perception_crash` | perception node killed | HOLD, then lands | same |
+| `autonomy_crash` | mission node killed | PX4 lands on its own, within 3 m | within 2.4 to 3.7 m |
 
-Huntsman's numbers come from a fresh simulator per scenario: in one long run PX4 lost the simulated compass, refused
-to arm, and every later scenario stopped at ABORT on the ground (the safe answer, but nothing tested).
+![every scenario on both drones](docs/img/scenario-table-final.png)
+
+`popup` (a wall appears 2.5 m ahead mid-flight) isn't in the default list yet: the drone sees it but still hits it. That's
+Autonomous-Systems #95.
 
 ## Record a scenario
 
