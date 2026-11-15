@@ -15,8 +15,11 @@ ev = [json.loads(l) for l in open(f'{rec}/log.jsonl') if l.strip()]
 S = {k: [(e['t'], e['d']) for e in ev if e['k'] == k] for k in ('grid', 'path', 'pos', 'att', 'state')}
 T = {k: [x[0] for x in v] for k, v in S.items()}
 t_end = ev[-1]['t']
-# B: the end of the first planned path is the destination (later paths can end at a landing-search spot).
-dn, de = S['path'][0][1][-1] if S['path'] and S['path'][0][1] else (0.0, 0.0)
+# B: the destination the scenario sent (log.txt next to data/); else the end of the first planned path.
+_log = os.path.join(os.path.dirname(os.path.abspath(rec)), 'log.txt')
+_m = re.search(r'destination: N (-?[0-9.]+) E (-?[0-9.]+)', open(_log).read()) if os.path.exists(_log) else None
+dn, de = (float(_m.group(1)), float(_m.group(2))) if _m else \
+    (S['path'][0][1][-1] if S['path'] and S['path'][0][1] else (0.0, 0.0))
 
 
 def at(k, t):
